@@ -1,90 +1,90 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Leaf, ChevronDown } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Leaf, LogOut } from "lucide-react"
 import { LandingView } from "@/components/landing-view"
 import { RestaurantView } from "@/components/restaurant-view"
 import { UserView } from "@/components/user-view"
 import { VolunteerView } from "@/components/volunteer-view"
+import { supabase } from "@/lib/supabase"
+import type { User } from "@supabase/supabase-js"
 
-type ViewType = "landing" | "restaurant" | "user" | "volunteer"
+type RoleType = "restaurant" | "user" | "volunteer"
 
-const VIEW_LABELS: Record<ViewType, string> = {
-  landing: "Landing",
-  restaurant: "Restaurant UI",
-  user: "User UI",
-  volunteer: "Volunteer UI",
+const ROLE_LABELS: Record<RoleType, string> = {
+  restaurant: "Restaurant Dashboard",
+  user: "User Dashboard",
+  volunteer: "Volunteer Dashboard",
 }
 
 export default function Page() {
-  const [view, setView] = useState<ViewType>("landing")
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const role = (user?.user_metadata?.role as RoleType) ?? null
+
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-2 animate-pulse">
+          <Leaf className="h-6 w-6 text-primary" />
+          <span className="text-lg font-bold text-foreground">Plate Pass</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
       {/* Sticky Navigation */}
       <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <button
-            onClick={() => setView("landing")}
-            className="flex items-center gap-2 transition-opacity hover:opacity-80"
-          >
+          <div className="flex items-center gap-2 transition-opacity hover:opacity-80">
             <Leaf className="h-5 w-5 text-primary" />
             <span className="text-lg font-bold text-foreground">Plate Pass</span>
-          </button>
-
-          {/* Desktop Navigation */}
-          <nav className="hidden items-center gap-1 md:flex">
-            {(Object.keys(VIEW_LABELS) as ViewType[]).map((key) => (
-              <Button
-                key={key}
-                variant={view === key ? "default" : "ghost"}
-                size="sm"
-                onClick={() => setView(key)}
-                className="text-sm"
-              >
-                {VIEW_LABELS[key]}
-              </Button>
-            ))}
-          </nav>
-
-          {/* Mobile Dropdown */}
-          <div className="md:hidden">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1">
-                  {VIEW_LABELS[view]}
-                  <ChevronDown className="h-3.5 w-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {(Object.keys(VIEW_LABELS) as ViewType[]).map((key) => (
-                  <DropdownMenuItem
-                    key={key}
-                    onClick={() => setView(key)}
-                    className={view === key ? "font-semibold" : ""}
-                  >
-                    {VIEW_LABELS[key]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
+
+          {user && role ? (
+            <div className="flex items-center gap-3">
+              <span className="hidden text-sm text-muted-foreground sm:inline">
+                {ROLE_LABELS[role]}
+              </span>
+              <Button variant="ghost" size="sm" className="gap-2" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </Button>
+            </div>
+          ) : null}
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1">
-        {view === "landing" && <LandingView onNavigate={setView} />}
-        {view === "restaurant" && <RestaurantView />}
-        {view === "user" && <UserView />}
-        {view === "volunteer" && <VolunteerView />}
+        {!user && <LandingView />}
+        {user && role === "restaurant" && <RestaurantView />}
+        {user && role === "user" && <UserView />}
+        {user && role === "volunteer" && <VolunteerView />}
+        {user && !role && <LandingView />}
       </main>
 
       {/* Footer */}

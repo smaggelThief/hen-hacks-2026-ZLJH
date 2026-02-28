@@ -4,22 +4,38 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Leaf, UtensilsCrossed, Users, Truck, ArrowRight, Heart, Recycle, ShieldCheck } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
-type ViewType = "landing" | "restaurant" | "user" | "volunteer"
+type RoleType = "restaurant" | "user" | "volunteer"
 
-interface LandingViewProps {
-  onNavigate: (view: ViewType) => void
+const ROLE_DISPLAY: Record<RoleType, string> = {
+  restaurant: "a Restaurant Partner",
+  user: "a User",
+  volunteer: "a Volunteer Driver",
 }
 
-export function LandingView({ onNavigate }: LandingViewProps) {
+export function LandingView() {
   const [agreementDialog, setAgreementDialog] = useState<"restaurant" | "volunteer" | null>(null)
   const [agreed, setAgreed] = useState(false)
 
-  function handleRoleClick(role: "restaurant" | "user" | "volunteer") {
+  const [authDialog, setAuthDialog] = useState(false)
+  const [authRole, setAuthRole] = useState<RoleType | null>(null)
+  const [isSignUp, setIsSignUp] = useState(true)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [authError, setAuthError] = useState("")
+  const [authLoading, setAuthLoading] = useState(false)
+  const [confirmEmail, setConfirmEmail] = useState(false)
+
+  function handleRoleClick(role: RoleType) {
     if (role === "user") {
-      onNavigate("user")
+      setAuthRole("user")
+      setIsSignUp(true)
+      setAuthDialog(true)
     } else {
       setAgreed(false)
       setAgreementDialog(role)
@@ -28,9 +44,63 @@ export function LandingView({ onNavigate }: LandingViewProps) {
 
   function handleProceed() {
     if (agreed && agreementDialog) {
-      onNavigate(agreementDialog)
+      setAuthRole(agreementDialog)
       setAgreementDialog(null)
       setAgreed(false)
+      setIsSignUp(true)
+      setAuthDialog(true)
+    }
+  }
+
+  function resetAuthForm() {
+    setEmail("")
+    setPassword("")
+    setAuthError("")
+    setIsSignUp(true)
+    setAuthRole(null)
+    setAuthLoading(false)
+    setConfirmEmail(false)
+  }
+
+  async function handleAuth() {
+    if (!authRole || !email || !password) return
+    setAuthError("")
+    setAuthLoading(true)
+
+    try {
+      if (isSignUp) {
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { role: authRole },
+          },
+        })
+        if (error) {
+          setAuthError(error.message)
+          return
+        }
+        if (data.user && !data.session) {
+          setConfirmEmail(true)
+          return
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (error) {
+          setAuthError(error.message)
+          return
+        }
+      }
+      setAuthDialog(false)
+      resetAuthForm()
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "An unexpected error occurred"
+      setAuthError(message)
+    } finally {
+      setAuthLoading(false)
     }
   }
 
@@ -245,6 +315,91 @@ export function LandingView({ onNavigate }: LandingViewProps) {
               Proceed
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Auth Dialog */}
+      <Dialog open={authDialog} onOpenChange={(open) => { if (!open) { setAuthDialog(false); resetAuthForm() } }}>
+        <DialogContent className="sm:max-w-md">
+          {confirmEmail ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Check Your Email</DialogTitle>
+                <DialogDescription>
+                  We sent a confirmation link to <strong>{email}</strong>. Please confirm your email, then sign in below.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="flex-col gap-3 sm:flex-col">
+                <Button
+                  className="w-full"
+                  onClick={() => {
+                    setConfirmEmail(false)
+                    setIsSignUp(false)
+                    setPassword("")
+                    setAuthError("")
+                  }}
+                >
+                  Sign In
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>{isSignUp ? "Create Your Account" : "Welcome Back"}</DialogTitle>
+                <DialogDescription>
+                  {isSignUp
+                    ? `Sign up to join Plate Pass as ${authRole ? ROLE_DISPLAY[authRole] : "a member"}.`
+                    : "Sign in to your existing Plate Pass account."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="auth-email">Email</Label>
+                  <Input
+                    id="auth-email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); setAuthError("") }}
+                    onKeyDown={(e) => e.key === "Enter" && handleAuth()}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="auth-password">Password</Label>
+                  <Input
+                    id="auth-password"
+                    type="password"
+                    placeholder="At least 6 characters"
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setAuthError("") }}
+                    onKeyDown={(e) => e.key === "Enter" && handleAuth()}
+                  />
+                </div>
+                {authError && (
+                  <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {authError}
+                  </p>
+                )}
+              </div>
+              <DialogFooter className="flex-col gap-3 sm:flex-col">
+                <Button
+                  className="w-full"
+                  disabled={authLoading || !email || !password}
+                  onClick={handleAuth}
+                >
+                  {authLoading ? "Please wait\u2026" : isSignUp ? "Sign Up" : "Sign In"}
+                </Button>
+                <button
+                  type="button"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  onClick={() => { setIsSignUp(!isSignUp); setAuthError("") }}
+                >
+                  {isSignUp ? "Already have an account? Sign in" : "Don\u2019t have an account? Sign up"}
+                </button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
