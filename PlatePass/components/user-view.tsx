@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,45 +17,93 @@ import {
   Filter,
   Users,
   Truck,
-  Navigation,
+  Loader2,
 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
-interface FoodItem {
-  id: number
-  restaurant: string
-  dish: string
-  cuisine: string
-  distance: string
+interface Donation {
+  id: string
+  restaurant_id: string
+  dish_name: string
   servings: number
-  timeWindow: string
-  allergens: string[]
-  address: string
+  allergens: string | null
+  cuisine: string | null
+  location: string
+  status: string
+  pickup_start: string | null
+  pickup_end: string | null
+  created_at: string
 }
 
-const MOCK_FOOD: FoodItem[] = [
-  { id: 1, restaurant: "Green Leaf Kitchen", dish: "Vegetable Stir Fry", cuisine: "Asian", distance: "0.5 mi", servings: 12, timeWindow: "2:00 - 4:00 PM", allergens: ["Soy", "Sesame"], address: "123 Oak Ave, Springfield" },
-  { id: 2, restaurant: "Bella Italia", dish: "Pasta Primavera", cuisine: "Italian", distance: "1.2 mi", servings: 8, timeWindow: "3:00 - 5:00 PM", allergens: ["Gluten", "Dairy"], address: "456 Elm St, Springfield" },
-  { id: 3, restaurant: "The Daily Bread", dish: "Sourdough & Soup", cuisine: "American", distance: "0.8 mi", servings: 20, timeWindow: "1:00 - 3:00 PM", allergens: ["Gluten"], address: "789 Maple Rd, Springfield" },
-  { id: 4, restaurant: "Spice Route", dish: "Chickpea Curry", cuisine: "Indian", distance: "2.1 mi", servings: 15, timeWindow: "4:00 - 6:00 PM", allergens: [], address: "321 Pine Blvd, Springfield" },
-  { id: 5, restaurant: "Taco Fiesta", dish: "Bean & Rice Burritos", cuisine: "Mexican", distance: "1.5 mi", servings: 10, timeWindow: "12:00 - 2:00 PM", allergens: ["Dairy"], address: "654 Cedar Ln, Springfield" },
-  { id: 6, restaurant: "Sakura Sushi", dish: "Assorted Sushi Rolls", cuisine: "Japanese", distance: "3.0 mi", servings: 18, timeWindow: "5:00 - 7:00 PM", allergens: ["Soy", "Gluten", "Fish"], address: "987 Birch Way, Springfield" },
-]
+function formatTimeWindow(start: string | null, end: string | null): string {
+  if (!start || !end) return "Flexible"
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  return `${fmt(start)} \u2013 ${fmt(end)}`
+}
+
+function parseAllergens(raw: string | null): string[] {
+  if (!raw) return []
+  return raw.split(",").map((s) => s.trim()).filter(Boolean)
+}
 
 export function UserView() {
-  const [selectedItem, setSelectedItem] = useState<FoodItem | null>(null)
+  const [donations, setDonations] = useState<Donation[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedItem, setSelectedItem] = useState<Donation | null>(null)
   const [isDelivery, setIsDelivery] = useState(false)
   const [people, setPeople] = useState("1")
+  const [confirming, setConfirming] = useState(false)
   const [cuisineFilter, setCuisineFilter] = useState("all")
   const [allergenFilter, setAllergenFilter] = useState("all")
   const [distanceFilter, setDistanceFilter] = useState("all")
 
-  const filtered = MOCK_FOOD.filter((item) => {
+  const fetchAvailable = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("donations")
+        .select("*")
+        .eq("status", "available")
+        .order("created_at", { ascending: false })
+
+      if (!error && data) setDonations(data)
+    } catch {
+      // table may not exist yet
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchAvailable()
+  }, [fetchAvailable])
+
+  const filtered = donations.filter((item) => {
     if (cuisineFilter !== "all" && item.cuisine !== cuisineFilter) return false
-    if (allergenFilter !== "all" && item.allergens.includes(allergenFilter)) return false
-    if (distanceFilter === "1mi" && parseFloat(item.distance) > 1) return false
-    if (distanceFilter === "2mi" && parseFloat(item.distance) > 2) return false
+    if (allergenFilter !== "all" && parseAllergens(item.allergens).includes(allergenFilter)) return false
     return true
   })
+
+  async function handleConfirmOrder() {
+    if (!selectedItem) return
+    setConfirming(true)
+    try {
+      const newStatus = isDelivery ? "pending_delivery" : "claimed_pickup"
+      const { error } = await supabase
+        .from("donations")
+        .update({ status: newStatus })
+        .eq("id", selectedItem.id)
+
+      if (error) throw error
+
+      setSelectedItem(null)
+      await fetchAvailable()
+    } catch (err) {
+      console.error("Failed to confirm order:", err)
+    } finally {
+      setConfirming(false)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
@@ -123,60 +171,69 @@ export function UserView() {
       {/* Results Count */}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Showing <span className="font-semibold text-foreground">{filtered.length}</span> available meals near you
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading available meals…
+            </span>
+          ) : (
+            <>
+              Showing <span className="font-semibold text-foreground">{filtered.length}</span> available meals near you
+            </>
+          )}
         </p>
       </div>
 
       {/* Food Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((item) => (
-          <Card
-            key={item.id}
-            className="group cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
-            onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1") }}
-          >
-            <CardHeader className="pb-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle className="text-base">{item.dish}</CardTitle>
-                  <CardDescription className="flex items-center gap-1 mt-1">
-                    <UtensilsCrossed className="h-3 w-3" />
-                    {item.restaurant}
-                  </CardDescription>
+        {filtered.map((item) => {
+          const allergens = parseAllergens(item.allergens)
+          return (
+            <Card
+              key={item.id}
+              className="group cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
+              onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1") }}
+            >
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <CardTitle className="text-base">{item.dish_name}</CardTitle>
+                    <CardDescription className="flex items-center gap-1 mt-1">
+                      <UtensilsCrossed className="h-3 w-3" />
+                      {item.location}
+                    </CardDescription>
+                  </div>
+                  {item.cuisine && (
+                    <Badge variant="secondary" className="shrink-0">{item.cuisine}</Badge>
+                  )}
                 </div>
-                <Badge variant="secondary" className="shrink-0">{item.cuisine}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <Navigation className="h-3.5 w-3.5 text-primary" />
-                  {item.distance} away
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-3.5 w-3.5 text-primary" />
+                    {formatTimeWindow(item.pickup_start, item.pickup_end)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5 text-primary" />
+                    {item.servings} servings available
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3.5 w-3.5 text-primary" />
-                  {item.timeWindow}
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-3.5 w-3.5 text-primary" />
-                  {item.servings} servings available
-                </div>
-              </div>
-              {item.allergens.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1">
-                  {item.allergens.map((a) => (
-                    <Badge key={a} variant="outline" className="text-xs">
-                      {a}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+                {allergens.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-1">
+                    {allergens.map((a) => (
+                      <Badge key={a} variant="outline" className="text-xs">
+                        {a}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )
+        })}
       </div>
 
-      {filtered.length === 0 && (
+      {!loading && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <UtensilsCrossed className="mb-4 h-12 w-12 text-muted-foreground/40" />
           <p className="text-lg font-medium text-muted-foreground">No meals match your filters</p>
@@ -190,26 +247,22 @@ export function UserView() {
           {selectedItem && (
             <>
               <SheetHeader>
-                <SheetTitle>{selectedItem.dish}</SheetTitle>
-                <SheetDescription>{selectedItem.restaurant}</SheetDescription>
+                <SheetTitle>{selectedItem.dish_name}</SheetTitle>
+                <SheetDescription>{selectedItem.location}</SheetDescription>
               </SheetHeader>
               <div className="flex flex-col gap-6 py-6">
                 <div className="flex flex-col gap-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <Navigation className="h-4 w-4 text-primary" />
-                    {selectedItem.distance} away
-                  </div>
-                  <div className="flex items-center gap-2 text-muted-foreground">
                     <Clock className="h-4 w-4 text-primary" />
-                    {selectedItem.timeWindow}
+                    {formatTimeWindow(selectedItem.pickup_start, selectedItem.pickup_end)}
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Users className="h-4 w-4 text-primary" />
                     {selectedItem.servings} servings available
                   </div>
-                  {selectedItem.allergens.length > 0 && (
+                  {parseAllergens(selectedItem.allergens).length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {selectedItem.allergens.map((a) => (
+                      {parseAllergens(selectedItem.allergens).map((a) => (
                         <Badge key={a} variant="outline" className="text-xs">{a}</Badge>
                       ))}
                     </div>
@@ -267,20 +320,34 @@ export function UserView() {
                           <MapPin className="h-4 w-4 text-primary" />
                           <span className="font-medium text-foreground">Pickup Address</span>
                         </div>
-                        <p className="text-muted-foreground">{selectedItem.address}</p>
+                        <p className="text-muted-foreground">{selectedItem.location}</p>
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-primary" />
                           <span className="font-medium text-foreground">Pickup Window</span>
                         </div>
-                        <p className="text-muted-foreground">{selectedItem.timeWindow}</p>
+                        <p className="text-muted-foreground">
+                          {formatTimeWindow(selectedItem.pickup_start, selectedItem.pickup_end)}
+                        </p>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
               <SheetFooter>
-                <Button className="w-full" size="lg">
-                  Confirm Order for {people} {parseInt(people) === 1 ? "person" : "people"}
+                <Button
+                  className="w-full"
+                  size="lg"
+                  disabled={confirming}
+                  onClick={handleConfirmOrder}
+                >
+                  {confirming ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Confirming…
+                    </>
+                  ) : (
+                    <>Confirm Order for {people} {parseInt(people) === 1 ? "person" : "people"}</>
+                  )}
                 </Button>
               </SheetFooter>
             </>

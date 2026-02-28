@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -15,12 +15,34 @@ import {
   Trophy,
   UserPlus,
   Sparkles,
-  Navigation,
   MapPin,
   Clock,
   ArrowRight,
   Route,
+  Loader2,
 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
+
+interface Donation {
+  id: string
+  restaurant_id: string
+  dish_name: string
+  servings: number
+  allergens: string | null
+  cuisine: string | null
+  location: string
+  status: string
+  pickup_start: string | null
+  pickup_end: string | null
+  created_at: string
+}
+
+function formatTimeWindow(start: string | null, end: string | null): string {
+  if (!start || !end) return "Flexible"
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  return `${fmt(start)} \u2013 ${fmt(end)}`
+}
 
 const LEADERBOARD = [
   { rank: 1, name: "You", deliveries: 47, initials: "YO" },
@@ -57,32 +79,56 @@ const AI_ROUTES = [
   },
 ]
 
-interface Delivery {
-  id: number
-  restaurant: string
-  dish: string
-  distance: string
-  dropOff: string
-  timeWindow: string
-  servings: number
-}
-
-const MOCK_DELIVERIES: Delivery[] = [
-  { id: 1, restaurant: "Green Leaf Kitchen", dish: "Vegetable Stir Fry", distance: "1.2 mi", dropOff: "Community Center, 100 Oak Ave", timeWindow: "2:00 - 3:00 PM", servings: 12 },
-  { id: 2, restaurant: "Bella Italia", dish: "Pasta Primavera", distance: "2.4 mi", dropOff: "Shelter, 200 Elm St", timeWindow: "3:00 - 4:30 PM", servings: 8 },
-  { id: 3, restaurant: "The Daily Bread", dish: "Sourdough & Soup", distance: "0.8 mi", dropOff: "Food Bank, 300 Maple Rd", timeWindow: "1:00 - 2:00 PM", servings: 20 },
-  { id: 4, restaurant: "Spice Route", dish: "Chickpea Curry", distance: "3.5 mi", dropOff: "Church Hall, 400 Pine Blvd", timeWindow: "4:00 - 5:30 PM", servings: 15 },
-  { id: 5, restaurant: "Taco Fiesta", dish: "Bean Burritos", distance: "1.8 mi", dropOff: "Youth Center, 500 Cedar Ln", timeWindow: "12:00 - 1:30 PM", servings: 10 },
-]
-
 export function VolunteerView() {
+  const [deliveries, setDeliveries] = useState<Donation[]>([])
+  const [loadingDeliveries, setLoadingDeliveries] = useState(true)
+  const [acceptingId, setAcceptingId] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState("time")
   const [addFriendOpen, setAddFriendOpen] = useState(false)
-  const [accepted, setAccepted] = useState<number[]>([])
 
-  const sorted = [...MOCK_DELIVERIES].sort((a, b) => {
-    if (sortBy === "distance") return parseFloat(a.distance) - parseFloat(b.distance)
-    return a.timeWindow.localeCompare(b.timeWindow)
+  const fetchDeliveries = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from("donations")
+        .select("*")
+        .eq("status", "pending_delivery")
+        .order("created_at", { ascending: false })
+
+      if (!error && data) setDeliveries(data)
+    } catch {
+      // table may not exist yet
+    } finally {
+      setLoadingDeliveries(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchDeliveries()
+  }, [fetchDeliveries])
+
+  async function handleAccept(id: string) {
+    setAcceptingId(id)
+    try {
+      const { error } = await supabase
+        .from("donations")
+        .update({ status: "accepted_delivery" })
+        .eq("id", id)
+
+      if (error) throw error
+
+      await fetchDeliveries()
+    } catch (err) {
+      console.error("Failed to accept delivery:", err)
+    } finally {
+      setAcceptingId(null)
+    }
+  }
+
+  const sorted = [...deliveries].sort((a, b) => {
+    if (sortBy === "distance") {
+      return (a.pickup_start ?? "").localeCompare(b.pickup_start ?? "")
+    }
+    return (a.pickup_start ?? "").localeCompare(b.pickup_start ?? "")
   })
 
   return (
@@ -196,7 +242,11 @@ export function VolunteerView() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-base">Available Deliveries</CardTitle>
-                <CardDescription className="mt-1">{sorted.length} deliveries waiting</CardDescription>
+                <CardDescription className="mt-1">
+                  {loadingDeliveries
+                    ? "Loading…"
+                    : `${sorted.length} deliver${sorted.length === 1 ? "y" : "ies"} waiting`}
+                </CardDescription>
               </div>
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-full sm:w-36">
@@ -211,49 +261,58 @@ export function VolunteerView() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col gap-3">
-              {sorted.map((delivery) => {
-                const isAccepted = accepted.includes(delivery.id)
-                return (
-                  <div
-                    key={delivery.id}
-                    className={`rounded-lg border p-4 transition-all ${
-                      isAccepted
-                        ? "border-primary/40 bg-primary/5"
-                        : "border-border hover:border-primary/30"
-                    }`}
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex-1">
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="font-semibold text-foreground">{delivery.dish}</span>
-                          <Badge variant="outline" className="text-xs">{delivery.servings} servings</Badge>
+              {loadingDeliveries ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading deliveries…
+                </div>
+              ) : sorted.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Truck className="mb-3 h-10 w-10 text-muted-foreground/40" />
+                  <p className="text-sm font-medium text-muted-foreground">No deliveries waiting right now</p>
+                  <p className="text-xs text-muted-foreground/70">Check back soon — new orders come in throughout the day.</p>
+                </div>
+              ) : (
+                sorted.map((delivery) => {
+                  const isAccepting = acceptingId === delivery.id
+                  return (
+                    <div
+                      key={delivery.id}
+                      className="rounded-lg border border-border p-4 transition-all hover:border-primary/30"
+                    >
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex-1">
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="font-semibold text-foreground">{delivery.dish_name}</span>
+                            <Badge variant="outline" className="text-xs">{delivery.servings} servings</Badge>
+                          </div>
+                          <p className="mb-2 text-sm text-muted-foreground">{delivery.location}</p>
+                          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3 text-primary" /> {formatTimeWindow(delivery.pickup_start, delivery.pickup_end)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-3 w-3 text-primary" /> {delivery.location}
+                            </span>
+                          </div>
                         </div>
-                        <p className="mb-2 text-sm text-muted-foreground">{delivery.restaurant}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Navigation className="h-3 w-3 text-primary" /> {delivery.distance}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-3 w-3 text-primary" /> {delivery.timeWindow}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-3 w-3 text-primary" /> {delivery.dropOff}
-                          </span>
-                        </div>
+                        <Button
+                          size="sm"
+                          className="shrink-0 gap-1"
+                          disabled={isAccepting}
+                          onClick={() => handleAccept(delivery.id)}
+                        >
+                          {isAccepting ? (
+                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Accepting…</>
+                          ) : (
+                            "Accept Delivery"
+                          )}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        variant={isAccepted ? "secondary" : "default"}
-                        className="shrink-0 gap-1"
-                        disabled={isAccepted}
-                        onClick={() => setAccepted([...accepted, delivery.id])}
-                      >
-                        {isAccepted ? "Accepted" : "Accept Delivery"}
-                      </Button>
                     </div>
-                  </div>
-                )
-              })}
+                  )
+                })
+              )}
             </div>
           </CardContent>
         </Card>

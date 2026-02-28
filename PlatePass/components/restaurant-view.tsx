@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,15 +17,22 @@ import {
   MapPin,
   CalendarDays,
   Plus,
+  Loader2,
 } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
-const MOCK_HISTORY = [
-  { id: 1, date: "2026-02-27", dish: "Margherita Pizza", servings: 15, status: "Completed", location: "Downtown Kitchen" },
-  { id: 2, date: "2026-02-26", dish: "Chicken Stir Fry", servings: 20, status: "Completed", location: "Main Street Bistro" },
-  { id: 3, date: "2026-02-25", dish: "Caesar Salad", servings: 30, status: "Completed", location: "Downtown Kitchen" },
-  { id: 4, date: "2026-02-24", dish: "Tomato Soup", servings: 25, status: "Completed", location: "Harbor View" },
-  { id: 5, date: "2026-02-23", dish: "Pasta Primavera", servings: 12, status: "Completed", location: "Main Street Bistro" },
-]
+interface Donation {
+  id: string
+  dish_name: string
+  servings: number
+  allergens: string | null
+  cuisine: string | null
+  location: string
+  status: string
+  pickup_start: string | null
+  pickup_end: string | null
+  created_at: string
+}
 
 export function RestaurantView() {
   const [showAIResult, setShowAIResult] = useState(false)
@@ -38,9 +45,81 @@ export function RestaurantView() {
     weight: "8 lbs",
   })
 
+  // Controlled form inputs
+  const [timeStart, setTimeStart] = useState("14:00")
+  const [timeEnd, setTimeEnd] = useState("16:00")
+  const [location, setLocation] = useState("742 Evergreen Terrace, Springfield")
+
+  // Donation data from Supabase
+  const [donations, setDonations] = useState<Donation[]>([])
+  const [loadingDonations, setLoadingDonations] = useState(true)
+  const [creating, setCreating] = useState(false)
+
+  const fetchDonations = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from("donations")
+        .select("*")
+        .eq("restaurant_id", user.id)
+        .order("created_at", { ascending: false })
+
+      if (!error && data) {
+        setDonations(data)
+      }
+    } catch {
+      // Table may not exist yet — show empty state
+    } finally {
+      setLoadingDonations(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchDonations()
+  }, [fetchDonations])
+
+  // Computed stats
+  const totalServings = donations.reduce((sum, d) => sum + d.servings, 0)
+  const activeEvents = donations.filter((d) => d.status === "available").length
+
   function handleImageUpload() {
     setShowAIResult(true)
     setEditing(false)
+  }
+
+  async function handleCreateEvent() {
+    setCreating(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const today = new Date().toISOString().split("T")[0]
+
+      const { error } = await supabase.from("donations").insert({
+        restaurant_id: user.id,
+        dish_name: aiData.dish,
+        servings: parseInt(aiData.servings) || 0,
+        allergens: aiData.allergens || null,
+        cuisine: aiData.cuisine || null,
+        location,
+        pickup_start: `${today}T${timeStart}:00`,
+        pickup_end: `${today}T${timeEnd}:00`,
+      })
+
+      if (error) throw error
+
+      await fetchDonations()
+
+      // Reset the AI analysis panel after successful creation
+      setShowAIResult(false)
+      setAiData({ dish: "", servings: "", allergens: "", cuisine: "", weight: "" })
+    } catch (err) {
+      console.error("Failed to create donation:", err)
+    } finally {
+      setCreating(false)
+    }
   }
 
   return (
@@ -53,8 +132,10 @@ export function RestaurantView() {
             <Weight className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-foreground">1,240 lbs</p>
-            <p className="mt-1 text-xs text-muted-foreground">+180 lbs from last month</p>
+            <p className="text-3xl font-bold text-foreground">
+              {totalServings > 0 ? `${Math.round(totalServings * 0.75).toLocaleString()} lbs` : "0 lbs"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Estimated from servings donated</p>
           </CardContent>
         </Card>
         <Card>
@@ -63,8 +144,8 @@ export function RestaurantView() {
             <Heart className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-foreground">3,420</p>
-            <p className="mt-1 text-xs text-muted-foreground">+312 from last month</p>
+            <p className="text-3xl font-bold text-foreground">{totalServings.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Across {donations.length} donation{donations.length !== 1 ? "s" : ""}</p>
           </CardContent>
         </Card>
         <Card>
@@ -73,8 +154,8 @@ export function RestaurantView() {
             <CalendarDays className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-foreground">3</p>
-            <p className="mt-1 text-xs text-muted-foreground">2 scheduled for today</p>
+            <p className="text-3xl font-bold text-foreground">{activeEvents}</p>
+            <p className="mt-1 text-xs text-muted-foreground">Currently available for pickup</p>
           </CardContent>
         </Card>
         <Card>
@@ -103,18 +184,34 @@ export function RestaurantView() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="time-start">Time Start</Label>
-                <Input id="time-start" type="time" defaultValue="14:00" />
+                <Input
+                  id="time-start"
+                  type="time"
+                  value={timeStart}
+                  onChange={(e) => setTimeStart(e.target.value)}
+                />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="time-end">Time End</Label>
-                <Input id="time-end" type="time" defaultValue="16:00" />
+                <Input
+                  id="time-end"
+                  type="time"
+                  value={timeEnd}
+                  onChange={(e) => setTimeEnd(e.target.value)}
+                />
               </div>
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="location">Pickup Location</Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input id="location" className="pl-10" placeholder="123 Main Street, Suite 4" defaultValue="742 Evergreen Terrace, Springfield" />
+                <Input
+                  id="location"
+                  className="pl-10"
+                  placeholder="123 Main Street, Suite 4"
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
               </div>
             </div>
 
@@ -185,8 +282,16 @@ export function RestaurantView() {
               </div>
             )}
 
-            <Button className="w-full gap-2 sm:w-auto sm:self-end">
-              <Plus className="h-4 w-4" /> Create Event
+            <Button
+              className="w-full gap-2 sm:w-auto sm:self-end"
+              disabled={creating || !aiData.dish}
+              onClick={handleCreateEvent}
+            >
+              {creating ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</>
+              ) : (
+                <><Plus className="h-4 w-4" /> Create Event</>
+              )}
             </Button>
           </CardContent>
         </Card>
@@ -232,19 +337,38 @@ export function RestaurantView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {MOCK_HISTORY.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-mono text-xs">{item.date}</TableCell>
-                    <TableCell className="font-medium">{item.dish}</TableCell>
-                    <TableCell>{item.servings}</TableCell>
-                    <TableCell className="text-muted-foreground">{item.location}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="bg-primary/10 text-primary">
-                        {item.status}
-                      </Badge>
+                {loadingDonations ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading donations…
+                      </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : donations.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                      No donations yet. Create your first event above!
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  donations.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell className="font-mono text-xs">
+                        {new Date(item.created_at).toLocaleDateString("en-CA")}
+                      </TableCell>
+                      <TableCell className="font-medium">{item.dish_name}</TableCell>
+                      <TableCell>{item.servings}</TableCell>
+                      <TableCell className="text-muted-foreground">{item.location}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="bg-primary/10 text-primary capitalize">
+                          {item.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
