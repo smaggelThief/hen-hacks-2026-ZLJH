@@ -4,18 +4,18 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Leaf, LogOut } from "lucide-react"
 import { LandingView } from "@/components/landing-view"
-import { RestaurantView } from "@/components/restaurant-view"
-import { UserView } from "@/components/user-view"
-import { VolunteerView } from "@/components/volunteer-view"
+import { PlaterView } from "@/components/plater-view"
+import { EaterView } from "@/components/eater-view"
+import { PasserView } from "@/components/passer-view"
 import { supabase } from "@/lib/supabase"
 import type { User } from "@supabase/supabase-js"
 
 type RoleType = "restaurant" | "user" | "volunteer"
 
 const ROLE_LABELS: Record<RoleType, string> = {
-  restaurant: "Restaurant Dashboard",
-  user: "User Dashboard",
-  volunteer: "Volunteer Dashboard",
+  restaurant: "Plater Dashboard",
+  user: "Eater Dashboard",
+  volunteer: "Passer Dashboard",
 }
 
 export default function Page() {
@@ -81,9 +81,9 @@ export default function Page() {
       {/* Main Content */}
       <main className="flex-1">
         {!user && <LandingView />}
-        {user && role === "restaurant" && <RestaurantView />}
-        {user && role === "user" && <UserView />}
-        {user && role === "volunteer" && <VolunteerView />}
+        {user && role === "restaurant" && <PlaterView />}
+        {user && role === "user" && <EaterView />}
+        {user && role === "volunteer" && <PasserView />}
         {user && !role && <LandingView />}
       </main>
 

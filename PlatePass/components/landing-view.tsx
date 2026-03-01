@@ -13,9 +13,9 @@ import { supabase } from "@/lib/supabase"
 type RoleType = "restaurant" | "user" | "volunteer"
 
 const ROLE_DISPLAY: Record<RoleType, string> = {
-  restaurant: "a Restaurant Partner",
-  user: "a User",
-  volunteer: "a Volunteer Driver",
+  restaurant: "a Plater",
+  user: "an Eater",
+  volunteer: "a Passer",
 }
 
 export function LandingView() {
@@ -121,7 +121,7 @@ export function LandingView() {
           </h1>
           <p className="mx-auto mb-10 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
             Every day, restaurants discard tons of perfectly good food. Plate Pass bridges the gap
-            between surplus and need, connecting donors, recipients, and volunteer drivers
+            between surplus and need, connecting Platers, Eaters, and Passers
             in one seamless platform.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
@@ -156,14 +156,14 @@ export function LandingView() {
             <Users className="h-6 w-6 text-primary" />
             <div>
               <p className="text-2xl font-bold text-foreground">340+</p>
-              <p className="text-sm text-muted-foreground">Active Volunteers</p>
+              <p className="text-sm text-muted-foreground">Active Passers</p>
             </div>
           </div>
           <div className="flex items-center gap-3 text-center md:text-left">
             <UtensilsCrossed className="h-6 w-6 text-primary" />
             <div>
               <p className="text-2xl font-bold text-foreground">85</p>
-              <p className="text-sm text-muted-foreground">Partner Restaurants</p>
+              <p className="text-sm text-muted-foreground">Partner Platers</p>
             </div>
           </div>
         </div>
@@ -186,7 +186,7 @@ export function LandingView() {
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                   <UtensilsCrossed className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Restaurant</CardTitle>
+                <CardTitle className="text-xl">Plater</CardTitle>
                 <CardDescription>Donate surplus food and reduce waste from your kitchen.</CardDescription>
               </CardHeader>
               <CardContent>
@@ -205,7 +205,7 @@ export function LandingView() {
                   </li>
                 </ul>
                 <Button className="w-full gap-2 group-hover:bg-primary group-hover:text-primary-foreground" variant="outline">
-                  Join as Restaurant <ArrowRight className="h-4 w-4" />
+                  Join as Plater <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
@@ -219,7 +219,7 @@ export function LandingView() {
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
                   <Users className="h-6 w-6 text-accent" />
                 </div>
-                <CardTitle className="text-xl">User</CardTitle>
+                <CardTitle className="text-xl">Eater</CardTitle>
                 <CardDescription>Browse available food near you and place orders for free meals.</CardDescription>
               </CardHeader>
               <CardContent>
@@ -238,7 +238,7 @@ export function LandingView() {
                   </li>
                 </ul>
                 <Button className="w-full gap-2" variant="outline">
-                  Join as User <ArrowRight className="h-4 w-4" />
+                  Join as Eater <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
@@ -252,7 +252,7 @@ export function LandingView() {
                 <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
                   <Truck className="h-6 w-6 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Volunteer</CardTitle>
+                <CardTitle className="text-xl">Passer</CardTitle>
                 <CardDescription>Drive surplus food to those in need and climb the leaderboard.</CardDescription>
               </CardHeader>
               <CardContent>
@@ -271,7 +271,7 @@ export function LandingView() {
                   </li>
                 </ul>
                 <Button className="w-full gap-2 group-hover:bg-primary group-hover:text-primary-foreground" variant="outline">
-                  Join as Volunteer <ArrowRight className="h-4 w-4" />
+                  Join as Passer <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
@@ -285,18 +285,18 @@ export function LandingView() {
           <DialogHeader>
             <DialogTitle>Food Safety & Liability Agreement</DialogTitle>
             <DialogDescription>
-              Please review and accept the following terms before proceeding as a {agreementDialog === "restaurant" ? "Restaurant Partner" : "Volunteer Driver"}.
+              Please review and accept the following terms before proceeding as a {agreementDialog === "restaurant" ? "Plater" : "Passer"}.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm leading-relaxed text-muted-foreground">
             <p className="mb-3">
-              By joining Plate Pass as a {agreementDialog === "restaurant" ? "Restaurant Partner" : "Volunteer Driver"}, you agree to:
+              By joining Plate Pass as a {agreementDialog === "restaurant" ? "Plater" : "Passer"}, you agree to:
             </p>
             <ul className="flex flex-col gap-2">
               <li>1. Comply with all local food safety and handling regulations.</li>
               <li>2. Ensure donated food is fit for human consumption and properly stored.</li>
               <li>3. Hold Plate Pass harmless from any liability arising from food-related illness.</li>
-              <li>4. Follow all platform guidelines for {agreementDialog === "restaurant" ? "food preparation and packaging" : "safe food transportation and delivery"}.</li>
+              <li>4. Follow all platform guidelines for {agreementDialog === "restaurant" ? "food preparation and packaging" : "safe food transportation and delivery as a Passer"}.</li>
             </ul>
           </div>
           <div className="flex items-start gap-3 pt-2">

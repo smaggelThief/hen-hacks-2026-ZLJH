@@ -18,6 +18,8 @@ import {
   Users,
   Truck,
   Loader2,
+  Package,
+  CheckCircle2,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
@@ -35,6 +37,27 @@ interface Donation {
   created_at: string
 }
 
+interface OrderWithDonation {
+  id: string
+  donation_id: string
+  user_id: string
+  volunteer_id: string | null
+  servings: number
+  delivery_method: string
+  delivery_address: string | null
+  status: string
+  created_at: string
+  updated_at: string
+  donations: {
+    dish_name: string
+    location: string
+    cuisine: string | null
+    allergens: string | null
+    pickup_start: string | null
+    pickup_end: string | null
+  }
+}
+
 function formatTimeWindow(start: string | null, end: string | null): string {
   if (!start || !end) return "Flexible"
   const fmt = (iso: string) =>
@@ -47,7 +70,26 @@ function parseAllergens(raw: string | null): string[] {
   return raw.split(",").map((s) => s.trim()).filter(Boolean)
 }
 
-export function UserView() {
+function getStatusDisplay(status: string, method: string) {
+  switch (status) {
+    case "pending":
+      return method === "delivery"
+        ? { label: "Awaiting Passer", className: "bg-amber-500/10 text-amber-700 dark:text-amber-400" }
+        : { label: "Ready for Pickup", className: "bg-blue-500/10 text-blue-700 dark:text-blue-400" }
+    case "volunteer_accepted":
+      return { label: "Passer Assigned", className: "bg-blue-500/10 text-blue-700 dark:text-blue-400" }
+    case "picked_up":
+      return { label: "In Transit", className: "bg-violet-500/10 text-violet-700 dark:text-violet-400" }
+    case "completed":
+      return { label: "Completed", className: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" }
+    case "cancelled":
+      return { label: "Cancelled", className: "bg-red-500/10 text-red-700 dark:text-red-400" }
+    default:
+      return { label: status, className: "bg-muted text-muted-foreground" }
+  }
+}
+
+export function EaterView() {
   const [donations, setDonations] = useState<Donation[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<Donation | null>(null)
@@ -57,6 +99,11 @@ export function UserView() {
   const [cuisineFilter, setCuisineFilter] = useState("all")
   const [allergenFilter, setAllergenFilter] = useState("all")
   const [distanceFilter, setDistanceFilter] = useState("all")
+
+  const [myOrders, setMyOrders] = useState<OrderWithDonation[]>([])
+  const [loadingOrders, setLoadingOrders] = useState(true)
+  const [deliveryAddress, setDeliveryAddress] = useState("")
+  const [orderError, setOrderError] = useState<string | null>(null)
 
   const fetchAvailable = useCallback(async () => {
     try {
@@ -74,9 +121,30 @@ export function UserView() {
     }
   }, [])
 
+  const fetchMyOrders = useCallback(async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*, donations(dish_name, location, cuisine, allergens, pickup_start, pickup_end)")
+        .eq("user_id", user.id)
+        .in("status", ["pending", "volunteer_accepted", "picked_up"])
+        .order("created_at", { ascending: false })
+
+      if (!error && data) setMyOrders(data as OrderWithDonation[])
+    } catch {
+      // table may not exist yet
+    } finally {
+      setLoadingOrders(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchAvailable()
-  }, [fetchAvailable])
+    fetchMyOrders()
+  }, [fetchAvailable, fetchMyOrders])
 
   const filtered = donations.filter((item) => {
     if (cuisineFilter !== "all" && item.cuisine !== cuisineFilter) return false
@@ -87,27 +155,117 @@ export function UserView() {
   async function handleConfirmOrder() {
     if (!selectedItem) return
     setConfirming(true)
+    setOrderError(null)
+
     try {
-      const newStatus = isDelivery ? "pending_delivery" : "claimed_pickup"
-      const { error } = await supabase
-        .from("donations")
-        .update({ status: newStatus })
-        .eq("id", selectedItem.id)
+      const servingsCount = parseInt(people) || 1
+
+      if (isDelivery && !deliveryAddress.trim()) {
+        setOrderError("Please enter a delivery address.")
+        setConfirming(false)
+        return
+      }
+
+      const { error } = await supabase.rpc("place_order", {
+        p_donation_id: selectedItem.id,
+        p_servings: servingsCount,
+        p_delivery_method: isDelivery ? "delivery" : "pickup",
+        p_delivery_address: isDelivery ? deliveryAddress.trim() : null,
+      })
 
       if (error) throw error
 
       setSelectedItem(null)
-      await fetchAvailable()
-    } catch (err) {
-      console.error("Failed to confirm order:", err)
+      setDeliveryAddress("")
+      setOrderError(null)
+      await Promise.all([fetchAvailable(), fetchMyOrders()])
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to place order. Please try again."
+      console.error("Failed to place order:", err)
+      setOrderError(message)
     } finally {
       setConfirming(false)
     }
   }
 
+  async function handleCompletePickup(orderId: string) {
+    const { error } = await supabase
+      .from("orders")
+      .update({ status: "completed" })
+      .eq("id", orderId)
+    if (!error) await fetchMyOrders()
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
-      {/* Filters */}
+      {!loadingOrders && myOrders.length > 0 && (
+        <div className="mb-8">
+          <div className="mb-4 flex items-center gap-2">
+            <Package className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">My Active Orders</h2>
+            <Badge variant="secondary" className="ml-1">{myOrders.length}</Badge>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {myOrders.map((order) => {
+              const s = getStatusDisplay(order.status, order.delivery_method)
+              return (
+                <Card key={order.id} className="border-primary/20">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="text-base">{order.donations.dish_name}</CardTitle>
+                        <CardDescription className="mt-1 flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {order.donations.location}
+                        </CardDescription>
+                      </div>
+                      <Badge variant="secondary" className={s.className}>{s.label}</Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-3.5 w-3.5 text-primary" />
+                        {order.servings} serving{order.servings !== 1 ? "s" : ""}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {order.delivery_method === "delivery" ? (
+                          <Truck className="h-3.5 w-3.5 text-primary" />
+                        ) : (
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
+                        )}
+                        {order.delivery_method === "delivery" ? "Delivery" : "Pickup"}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 text-primary" />
+                        {formatTimeWindow(order.donations.pickup_start, order.donations.pickup_end)}
+                      </div>
+                      {order.delivery_address && (
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3.5 w-3.5 text-primary" />
+                          <span className="truncate">{order.delivery_address}</span>
+                        </div>
+                      )}
+                    </div>
+                    {order.delivery_method === "pickup" && order.status === "pending" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-3 w-full gap-1"
+                        onClick={() => handleCompletePickup(order.id)}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Mark Picked Up
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+          <Separator className="mt-8" />
+        </div>
+      )}
+
       <Card className="mb-8">
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end">
@@ -168,7 +326,6 @@ export function UserView() {
         </CardContent>
       </Card>
 
-      {/* Results Count */}
       <div className="mb-4 flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {loading ? (
@@ -183,7 +340,6 @@ export function UserView() {
         </p>
       </div>
 
-      {/* Food Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {filtered.map((item) => {
           const allergens = parseAllergens(item.allergens)
@@ -191,7 +347,7 @@ export function UserView() {
             <Card
               key={item.id}
               className="group cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
-              onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1") }}
+              onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1"); setOrderError(null); setDeliveryAddress("") }}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -241,8 +397,7 @@ export function UserView() {
         </div>
       )}
 
-      {/* Order Sheet */}
-      <Sheet open={!!selectedItem} onOpenChange={(open) => { if (!open) setSelectedItem(null) }}>
+      <Sheet open={!!selectedItem} onOpenChange={(open) => { if (!open) { setSelectedItem(null); setOrderError(null) } }}>
         <SheetContent className="overflow-y-auto">
           {selectedItem && (
             <>
@@ -250,7 +405,7 @@ export function UserView() {
                 <SheetTitle>{selectedItem.dish_name}</SheetTitle>
                 <SheetDescription>{selectedItem.location}</SheetDescription>
               </SheetHeader>
-              <div className="flex flex-col gap-6 py-6">
+              <div className="flex flex-col gap-6 px-4">
                 <div className="flex flex-col gap-3 text-sm">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <Clock className="h-4 w-4 text-primary" />
@@ -274,7 +429,7 @@ export function UserView() {
                 <div className="flex flex-col gap-4">
                   <h3 className="font-semibold text-foreground">Place Order</h3>
                   <div className="flex flex-col gap-2">
-                    <Label htmlFor="people">Number of People</Label>
+                    <Label htmlFor="people">Number of Servings</Label>
                     <Input
                       id="people"
                       type="number"
@@ -303,15 +458,30 @@ export function UserView() {
                   </div>
 
                   {isDelivery ? (
-                    <div className="rounded-lg border border-border bg-muted/30 p-4">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Truck className="h-4 w-4 text-primary" />
-                        <span className="text-muted-foreground">Estimated delivery time:</span>
-                        <span className="font-semibold text-foreground">25-35 min</span>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex flex-col gap-2">
+                        <Label htmlFor="delivery-address">Delivery Address</Label>
+                        <div className="relative">
+                          <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input
+                            id="delivery-address"
+                            className="pl-10"
+                            placeholder="123 Main St, Apt 4B"
+                            value={deliveryAddress}
+                            onChange={(e) => setDeliveryAddress(e.target.value)}
+                          />
+                        </div>
                       </div>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        A volunteer driver will deliver to your location. You will receive a notification when the driver is on the way.
-                      </p>
+                      <div className="rounded-lg border border-border bg-muted/30 p-4">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Truck className="h-4 w-4 text-primary" />
+                          <span className="text-muted-foreground">Estimated delivery time:</span>
+                          <span className="font-semibold text-foreground">25-35 min</span>
+                        </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          A Passer will deliver to your location. You will receive a notification when they are on the way.
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <div className="rounded-lg border border-border bg-muted/30 p-4">
@@ -332,6 +502,12 @@ export function UserView() {
                     </div>
                   )}
                 </div>
+
+                {orderError && (
+                  <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-400">
+                    {orderError}
+                  </p>
+                )}
               </div>
               <SheetFooter>
                 <Button
@@ -346,7 +522,7 @@ export function UserView() {
                       Confirming…
                     </>
                   ) : (
-                    <>Confirm Order for {people} {parseInt(people) === 1 ? "person" : "people"}</>
+                    <>Confirm Order for {people} {parseInt(people) === 1 ? "serving" : "servings"}</>
                   )}
                 </Button>
               </SheetFooter>
