@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,6 +28,18 @@ import {
   Mail,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+
+const cardItem = {
+  initial: { opacity: 0, scale: 0.9 },
+  animate: { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 25 } },
+  exit: { opacity: 0, scale: 0.9, transition: { duration: 0.2 } },
+}
+
+const listItem = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: { type: "spring" as const, stiffness: 300, damping: 25 } },
+  exit: { opacity: 0, y: -10, transition: { duration: 0.2 } },
+}
 
 interface OrderWithDonation {
   id: string
@@ -410,7 +423,12 @@ export function PasserView() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       {/* ── Total Deliveries Stat ── */}
-      <div className="mb-8">
+      <motion.div
+        className="mb-8"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+      >
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Deliveries</CardTitle>
@@ -423,7 +441,7 @@ export function PasserView() {
             <p className="mt-1 text-xs text-muted-foreground">Completed deliveries</p>
           </CardContent>
         </Card>
-      </div>
+      </motion.div>
 
       {/* ── My Active Deliveries ── */}
       {!loadingMine && myDeliveries.length > 0 && (
@@ -434,75 +452,90 @@ export function PasserView() {
             <Badge variant="secondary" className="ml-1">{myDeliveries.length}</Badge>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
+            <AnimatePresence mode="popLayout">
             {myDeliveries.map((order) => {
               const s = getActiveStatusDisplay(order.status)
               const isProgressing = progressingId === order.id
               return (
-                <Card key={order.id} className="border-primary/20">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-base">{order.donations.dish_name}</CardTitle>
-                        <CardDescription className="mt-1">
-                          {order.servings} serving{order.servings !== 1 ? "s" : ""}
-                        </CardDescription>
-                      </div>
-                      <Badge variant="secondary" className={s.className}>{s.label}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col gap-3 text-sm">
-                      <div className="rounded-lg border border-border bg-muted/30 p-3">
-                        <p className="mb-1 text-xs font-medium text-muted-foreground">Pick up from</p>
-                        <div className="flex items-center gap-2 text-foreground">
-                          <MapPin className="h-3.5 w-3.5 text-primary" />
-                          {order.donations.location}
+                <motion.div
+                  key={order.id}
+                  layout
+                  variants={cardItem}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                  <Card className="border-primary/20">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{order.donations.dish_name}</CardTitle>
+                          <CardDescription className="mt-1">
+                            {order.servings} serving{order.servings !== 1 ? "s" : ""}
+                          </CardDescription>
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-muted-foreground">
-                          <Clock className="h-3.5 w-3.5 text-primary" />
-                          {formatTimeWindow(order.donations.pickup_start, order.donations.pickup_end)}
-                        </div>
+                        <Badge variant="secondary" className={`${s.className} animate-pulse-slow`}>{s.label}</Badge>
                       </div>
-                      {order.delivery_address && (
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-col gap-3 text-sm">
                         <div className="rounded-lg border border-border bg-muted/30 p-3">
-                          <p className="mb-1 text-xs font-medium text-muted-foreground">Deliver to</p>
+                          <p className="mb-1 text-xs font-medium text-muted-foreground">Pick up from</p>
                           <div className="flex items-center gap-2 text-foreground">
-                            <Navigation className="h-3.5 w-3.5 text-primary" />
-                            {order.delivery_address}
+                            <MapPin className="h-3.5 w-3.5 text-primary" />
+                            {order.donations.location}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-muted-foreground">
+                            <Clock className="h-3.5 w-3.5 text-primary" />
+                            {formatTimeWindow(order.donations.pickup_start, order.donations.pickup_end)}
                           </div>
                         </div>
-                      )}
-                      {order.status === "volunteer_accepted" && (
-                        <Button
-                          className="w-full gap-1"
-                          disabled={isProgressing}
-                          onClick={() => handleProgressStatus(order.id, "picked_up")}
-                        >
-                          {isProgressing ? (
-                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…</>
-                          ) : (
-                            <><CheckCircle2 className="h-3.5 w-3.5" /> Mark as Picked Up</>
-                          )}
-                        </Button>
-                      )}
-                      {order.status === "picked_up" && (
-                        <Button
-                          className="w-full gap-1"
-                          disabled={isProgressing}
-                          onClick={() => handleProgressStatus(order.id, "completed")}
-                        >
-                          {isProgressing ? (
-                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…</>
-                          ) : (
-                            <><CheckCircle2 className="h-3.5 w-3.5" /> Mark as Delivered</>
-                          )}
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                        {order.delivery_address && (
+                          <div className="rounded-lg border border-border bg-muted/30 p-3">
+                            <p className="mb-1 text-xs font-medium text-muted-foreground">Deliver to</p>
+                            <div className="flex items-center gap-2 text-foreground">
+                              <Navigation className="h-3.5 w-3.5 text-primary" />
+                              {order.delivery_address}
+                            </div>
+                          </div>
+                        )}
+                        {order.status === "volunteer_accepted" && (
+                          <motion.div whileTap={{ scale: 0.95 }}>
+                            <Button
+                              className="w-full gap-1"
+                              disabled={isProgressing}
+                              onClick={() => handleProgressStatus(order.id, "picked_up")}
+                            >
+                              {isProgressing ? (
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…</>
+                              ) : (
+                                <><CheckCircle2 className="h-3.5 w-3.5" /> Mark as Picked Up</>
+                              )}
+                            </Button>
+                          </motion.div>
+                        )}
+                        {order.status === "picked_up" && (
+                          <motion.div whileTap={{ scale: 0.95 }}>
+                            <Button
+                              className="w-full gap-1"
+                              disabled={isProgressing}
+                              onClick={() => handleProgressStatus(order.id, "completed")}
+                            >
+                              {isProgressing ? (
+                                <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Updating…</>
+                              ) : (
+                                <><CheckCircle2 className="h-3.5 w-3.5" /> Mark as Delivered</>
+                              )}
+                            </Button>
+                          </motion.div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               )
             })}
+            </AnimatePresence>
           </div>
           <Separator className="mt-8" />
         </div>
@@ -573,17 +606,19 @@ export function PasserView() {
                       </div>
                     )
                   })}
-                  <Button
-                    className="mt-1 w-full gap-2"
-                    disabled={acceptingRoute}
-                    onClick={handleAcceptRoute}
-                  >
-                    {acceptingRoute ? (
-                      <><Loader2 className="h-4 w-4 animate-spin" /> Accepting Route…</>
-                    ) : (
-                      <><Route className="h-4 w-4" /> Accept Entire Route</>
-                    )}
-                  </Button>
+                  <motion.div whileTap={{ scale: 0.95 }}>
+                    <Button
+                      className="mt-1 w-full gap-2"
+                      disabled={acceptingRoute}
+                      onClick={handleAcceptRoute}
+                    >
+                      {acceptingRoute ? (
+                        <><Loader2 className="h-4 w-4 animate-spin" /> Accepting Route…</>
+                      ) : (
+                        <><Route className="h-4 w-4" /> Accept Entire Route</>
+                      )}
+                    </Button>
+                  </motion.div>
                 </div>
               ) : null}
             </CardContent>
@@ -760,12 +795,18 @@ export function PasserView() {
                   <p className="text-xs text-muted-foreground/70">Check back soon — new orders come in throughout the day.</p>
                 </div>
               ) : (
-                sorted.map((order) => {
+                <AnimatePresence mode="popLayout">
+                {sorted.map((order) => {
                   const isAccepting = acceptingId === order.id
                   return (
-                    <div
+                    <motion.div
                       key={order.id}
-                      className="rounded-lg border border-border p-4 transition-all hover:border-primary/30"
+                      layout
+                      variants={listItem}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      className="rounded-lg border border-border p-4 transition-colors hover:border-primary/30"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex-1">
@@ -793,22 +834,25 @@ export function PasserView() {
                             </span>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          className="shrink-0 gap-1"
-                          disabled={isAccepting}
-                          onClick={() => handleAccept(order.id)}
-                        >
-                          {isAccepting ? (
-                            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Accepting…</>
-                          ) : (
-                            "Accept Delivery"
-                          )}
-                        </Button>
+                        <motion.div whileTap={{ scale: 0.95 }}>
+                          <Button
+                            size="sm"
+                            className="shrink-0 gap-1"
+                            disabled={isAccepting}
+                            onClick={() => handleAccept(order.id)}
+                          >
+                            {isAccepting ? (
+                              <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Accepting…</>
+                            ) : (
+                              "Accept Delivery"
+                            )}
+                          </Button>
+                        </motion.div>
                       </div>
-                    </div>
+                    </motion.div>
                   )
-                })
+                })}
+                </AnimatePresence>
               )}
             </div>
           </CardContent>

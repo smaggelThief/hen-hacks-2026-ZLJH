@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,6 +23,12 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+
+const cardItem = {
+  initial: { opacity: 0, scale: 0.9 },
+  animate: { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 25 } },
+  exit: { opacity: 0, scale: 0.9, transition: { duration: 0.2 } },
+}
 
 interface Donation {
   id: string
@@ -206,61 +213,75 @@ export function EaterView() {
             <Badge variant="secondary" className="ml-1">{myOrders.length}</Badge>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <AnimatePresence mode="popLayout">
             {myOrders.map((order) => {
               const s = getStatusDisplay(order.status, order.delivery_method)
+              const isActive = ["pending", "volunteer_accepted", "picked_up"].includes(order.status)
               return (
-                <Card key={order.id} className="border-primary/20">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-base">{order.donations.dish_name}</CardTitle>
-                        <CardDescription className="mt-1 flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
-                          {order.donations.location}
-                        </CardDescription>
-                      </div>
-                      <Badge variant="secondary" className={s.className}>{s.label}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <Users className="h-3.5 w-3.5 text-primary" />
-                        {order.servings} serving{order.servings !== 1 ? "s" : ""}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {order.delivery_method === "delivery" ? (
-                          <Truck className="h-3.5 w-3.5 text-primary" />
-                        ) : (
-                          <MapPin className="h-3.5 w-3.5 text-primary" />
-                        )}
-                        {order.delivery_method === "delivery" ? "Delivery" : "Pickup"}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-3.5 w-3.5 text-primary" />
-                        {formatTimeWindow(order.donations.pickup_start, order.donations.pickup_end)}
-                      </div>
-                      {order.delivery_address && (
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-3.5 w-3.5 text-primary" />
-                          <span className="truncate">{order.delivery_address}</span>
+                <motion.div
+                  key={order.id}
+                  layout
+                  variants={cardItem}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                >
+                  <Card className="border-primary/20">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-base">{order.donations.dish_name}</CardTitle>
+                          <CardDescription className="mt-1 flex items-center gap-1">
+                            <MapPin className="h-3 w-3" />
+                            {order.donations.location}
+                          </CardDescription>
                         </div>
+                        <Badge variant="secondary" className={`${s.className} ${isActive ? "animate-pulse-slow" : ""}`}>{s.label}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3.5 w-3.5 text-primary" />
+                          {order.servings} serving{order.servings !== 1 ? "s" : ""}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {order.delivery_method === "delivery" ? (
+                            <Truck className="h-3.5 w-3.5 text-primary" />
+                          ) : (
+                            <MapPin className="h-3.5 w-3.5 text-primary" />
+                          )}
+                          {order.delivery_method === "delivery" ? "Delivery" : "Pickup"}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 text-primary" />
+                          {formatTimeWindow(order.donations.pickup_start, order.donations.pickup_end)}
+                        </div>
+                        {order.delivery_address && (
+                          <div className="flex items-center gap-2">
+                            <MapPin className="h-3.5 w-3.5 text-primary" />
+                            <span className="truncate">{order.delivery_address}</span>
+                          </div>
+                        )}
+                      </div>
+                      {order.delivery_method === "pickup" && order.status === "pending" && (
+                        <motion.div whileTap={{ scale: 0.95 }}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-3 w-full gap-1"
+                            onClick={() => handleCompletePickup(order.id)}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Mark Picked Up
+                          </Button>
+                        </motion.div>
                       )}
-                    </div>
-                    {order.delivery_method === "pickup" && order.status === "pending" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-3 w-full gap-1"
-                        onClick={() => handleCompletePickup(order.id)}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Mark Picked Up
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </motion.div>
               )
             })}
+            </AnimatePresence>
           </div>
           <Separator className="mt-8" />
         </div>
@@ -341,54 +362,64 @@ export function EaterView() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <AnimatePresence mode="popLayout">
         {filtered.map((item) => {
           const allergens = parseAllergens(item.allergens)
           return (
-            <Card
+            <motion.div
               key={item.id}
-              role="button"
-              tabIndex={0}
-              className="group cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
-              onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1"); setOrderError(null); setDeliveryAddress("") }}
+              layout
+              variants={cardItem}
+              initial="initial"
+              animate="animate"
+              exit="exit"
             >
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-base">{item.dish_name}</CardTitle>
-                    <CardDescription className="flex items-center gap-1 mt-1">
-                      <UtensilsCrossed className="h-3 w-3" />
-                      {item.location}
-                    </CardDescription>
+              <Card
+                role="button"
+                tabIndex={0}
+                className="group cursor-pointer transition-colors hover:border-primary/50 hover:shadow-md"
+                onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1"); setOrderError(null); setDeliveryAddress("") }}
+              >
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-base">{item.dish_name}</CardTitle>
+                      <CardDescription className="flex items-center gap-1 mt-1">
+                        <UtensilsCrossed className="h-3 w-3" />
+                        {item.location}
+                      </CardDescription>
+                    </div>
+                    {item.cuisine && (
+                      <Badge variant="secondary" className="shrink-0">{item.cuisine}</Badge>
+                    )}
                   </div>
-                  {item.cuisine && (
-                    <Badge variant="secondary" className="shrink-0">{item.cuisine}</Badge>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-primary" />
+                      {formatTimeWindow(item.pickup_start, item.pickup_end)}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-3.5 w-3.5 text-primary" />
+                      {item.servings} servings available
+                    </div>
+                  </div>
+                  {allergens.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1">
+                      {allergens.map((a) => (
+                        <Badge key={a} variant="outline" className="text-xs">
+                          {a}
+                        </Badge>
+                      ))}
+                    </div>
                   )}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-3.5 w-3.5 text-primary" />
-                    {formatTimeWindow(item.pickup_start, item.pickup_end)}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Users className="h-3.5 w-3.5 text-primary" />
-                    {item.servings} servings available
-                  </div>
-                </div>
-                {allergens.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1">
-                    {allergens.map((a) => (
-                      <Badge key={a} variant="outline" className="text-xs">
-                        {a}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </motion.div>
           )
         })}
+        </AnimatePresence>
       </div>
 
       {!loading && filtered.length === 0 && (
@@ -508,21 +539,23 @@ export function EaterView() {
                 )}
               </div>
               <SheetFooter>
-                <Button
-                  className="w-full"
-                  size="lg"
-                  disabled={confirming}
-                  onClick={handleConfirmOrder}
-                >
-                  {confirming ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Confirming…
-                    </>
-                  ) : (
-                    <>Confirm Order for {people} {parseInt(people) === 1 ? "serving" : "servings"}</>
-                  )}
-                </Button>
+                <motion.div whileTap={{ scale: 0.95 }} className="w-full">
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    disabled={confirming}
+                    onClick={handleConfirmOrder}
+                  >
+                    {confirming ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Confirming…
+                      </>
+                    ) : (
+                      <>Confirm Order for {people} {parseInt(people) === 1 ? "serving" : "servings"}</>
+                    )}
+                  </Button>
+                </motion.div>
               </SheetFooter>
             </>
           )}

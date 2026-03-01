@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { motion, AnimatePresence } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +28,22 @@ import {
   ImageIcon,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+
+const statsStagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+} as const
+
+const statCard = {
+  hidden: { opacity: 0, y: 15 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" as const } },
+}
+
+const rowVariant = {
+  initial: { opacity: 0, scale: 0.97 },
+  animate: { opacity: 1, scale: 1, transition: { type: "spring" as const, stiffness: 300, damping: 25 } },
+  exit: { opacity: 0, scale: 0.95, transition: { duration: 0.2 } },
+}
 
 interface Donation {
   id: string
@@ -290,50 +307,63 @@ export function PlaterView() {
   return (
     <div className="mx-auto max-w-6xl px-6 py-8">
       {/* Top Stats */}
-      <div className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Waste Saved</CardTitle>
-            <Weight className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">
-              {totalServings > 0 ? `${Math.round(totalServings * 0.75).toLocaleString()} lbs` : "0 lbs"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">Estimated from servings donated</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Meals Donated</CardTitle>
-            <Heart className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">{totalServings.toLocaleString()}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Across {donations.length} donation{donations.length !== 1 ? "s" : ""}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Events</CardTitle>
-            <CalendarDays className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">{activeEvents}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Currently available for pickup</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Orders</CardTitle>
-            <Package className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold text-foreground">{incomingOrders.length}</p>
-            <p className="mt-1 text-xs text-muted-foreground">Active orders on your donations</p>
-          </CardContent>
-        </Card>
-      </div>
+      <motion.div
+        className="mb-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4"
+        variants={statsStagger}
+        initial="hidden"
+        animate="visible"
+      >
+        <motion.div variants={statCard}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Waste Saved</CardTitle>
+              <Weight className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-foreground">
+                {totalServings > 0 ? `${Math.round(totalServings * 0.75).toLocaleString()} lbs` : "0 lbs"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Estimated from servings donated</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div variants={statCard}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Meals Donated</CardTitle>
+              <Heart className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-foreground">{totalServings.toLocaleString()}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Across {donations.length} donation{donations.length !== 1 ? "s" : ""}</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div variants={statCard}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Active Events</CardTitle>
+              <CalendarDays className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-foreground">{activeEvents}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Currently available for pickup</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div variants={statCard}>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Pending Orders</CardTitle>
+              <Package className="h-4 w-4 text-primary" />
+            </CardHeader>
+            <CardContent>
+              <p className="text-3xl font-bold text-foreground">{incomingOrders.length}</p>
+              <p className="mt-1 text-xs text-muted-foreground">Active orders on your donations</p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </motion.div>
 
       <div className="grid gap-8 lg:grid-cols-5">
         {/* Create Donation Form */}
@@ -425,8 +455,15 @@ export function PlaterView() {
               )}
             </div>
 
+            <AnimatePresence>
             {showAIResult && (
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+              <motion.div
+                className="rounded-lg border border-primary/30 bg-primary/5 p-4"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              >
                 <div className="mb-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-primary" />
@@ -493,20 +530,23 @@ export function PlaterView() {
                     </div>
                   </div>
                 )}
-              </div>
+              </motion.div>
             )}
+            </AnimatePresence>
 
-            <Button
-              className="w-full gap-2 sm:w-auto sm:self-end"
-              disabled={creating || !aiData.dish}
-              onClick={handleCreateEvent}
-            >
-              {creating ? (
-                <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</>
-              ) : (
-                <><Plus className="h-4 w-4" /> Create Event</>
-              )}
-            </Button>
+            <motion.div whileTap={{ scale: 0.95 }} className="sm:self-end">
+              <Button
+                className="w-full gap-2 sm:w-auto"
+                disabled={creating || !aiData.dish}
+                onClick={handleCreateEvent}
+              >
+                {creating ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Creating…</>
+                ) : (
+                  <><Plus className="h-4 w-4" /> Create Event</>
+                )}
+              </Button>
+            </motion.div>
           </CardContent>
         </Card>
 
@@ -570,10 +610,20 @@ export function PlaterView() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  incomingOrders.map((order) => {
+                  <AnimatePresence mode="popLayout">
+                  {incomingOrders.map((order) => {
                     const s = getOrderStatusDisplay(order.status)
+                    const isActive = ["pending", "volunteer_accepted", "picked_up"].includes(order.status)
                     return (
-                      <TableRow key={order.id}>
+                      <motion.tr
+                        key={order.id}
+                        layout
+                        variants={rowVariant}
+                        initial="initial"
+                        animate="animate"
+                        exit="exit"
+                        className="border-b transition-colors hover:bg-muted/50"
+                      >
                         <TableCell className="font-mono text-xs">
                           {new Date(order.created_at).toLocaleDateString("en-CA")}
                         </TableCell>
@@ -590,13 +640,14 @@ export function PlaterView() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={s.className}>
+                          <Badge variant="secondary" className={`${s.className} ${isActive ? "animate-pulse-slow" : ""}`}>
                             {s.label}
                           </Badge>
                         </TableCell>
-                      </TableRow>
+                      </motion.tr>
                     )
-                  })
+                  })}
+                  </AnimatePresence>
                 )}
               </TableBody>
             </Table>
@@ -640,8 +691,17 @@ export function PlaterView() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  donations.map((item) => (
-                    <TableRow key={item.id}>
+                  <AnimatePresence mode="popLayout">
+                  {donations.map((item) => (
+                    <motion.tr
+                      key={item.id}
+                      layout
+                      variants={rowVariant}
+                      initial="initial"
+                      animate="animate"
+                      exit="exit"
+                      className="border-b transition-colors hover:bg-muted/50"
+                    >
                       <TableCell className="font-mono text-xs">
                         {new Date(item.created_at).toLocaleDateString("en-CA")}
                       </TableCell>
@@ -649,13 +709,13 @@ export function PlaterView() {
                       <TableCell>{item.servings}</TableCell>
                       <TableCell className="text-muted-foreground">{item.location}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={
+                        <Badge variant="secondary" className={`${
                           item.status === "available"
                             ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                             : item.status === "cancelled"
                             ? "bg-red-500/10 text-red-700 dark:text-red-400"
                             : "bg-primary/10 text-primary"
-                        }>
+                        } ${item.status === "available" ? "animate-pulse-slow" : ""}`}>
                           {item.status === "available" ? "Available" : item.status === "claimed" ? "Claimed" : item.status === "cancelled" ? "Cancelled" : item.status}
                         </Badge>
                       </TableCell>
@@ -681,8 +741,9 @@ export function PlaterView() {
                           </div>
                         )}
                       </TableCell>
-                    </TableRow>
-                  ))
+                    </motion.tr>
+                  ))}
+                  </AnimatePresence>
                 )}
               </TableBody>
             </Table>

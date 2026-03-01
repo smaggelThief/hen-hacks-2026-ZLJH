@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -9,6 +10,37 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Leaf, UtensilsCrossed, Users, Truck, ArrowRight, ShieldCheck } from "lucide-react"
 import { supabase } from "@/lib/supabase"
+
+const heroStagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.15 } },
+} as const
+
+const fadeSlideUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" as const } },
+}
+
+const cardStagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.12, delayChildren: 0.1 } },
+} as const
+
+const cardEntrance = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" as const } },
+}
+
+const blobFloat = (delay: number) => ({
+  y: [0, -20, 0],
+  transition: {
+    duration: 6,
+    repeat: Infinity,
+    repeatType: "mirror" as const,
+    ease: "easeInOut" as const,
+    delay,
+  },
+})
 
 type RoleType = "restaurant" | "user" | "volunteer"
 
@@ -118,138 +150,178 @@ export function LandingView({ signInTrigger = 0 }: LandingViewProps) {
   }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col overflow-x-hidden">
       {/* Hero Section */}
-      <section className="relative flex flex-col items-center justify-center px-6 py-24 text-center lg:py-36">
-        <div className="absolute inset-0 bg-primary/5" />
-        <div className="relative z-10 mx-auto max-w-3xl">
-          <div className="mb-6 flex items-center justify-center gap-2">
-            <Leaf className="h-8 w-8 text-primary" />
-            <span className="font-mono text-sm font-bold uppercase tracking-widest text-primary">
+      <section className="relative flex flex-col items-center justify-center px-6 py-32 text-center lg:py-44">
+        <div className="absolute inset-0 bg-primary/10" />
+
+        {/* Decorative blobs */}
+        <motion.div
+          className="pointer-events-none absolute left-0 top-0 h-[500px] w-[500px] -translate-x-1/3 -translate-y-1/4 rounded-full bg-green-400/30 blur-[120px]"
+          animate={blobFloat(0)}
+        />
+        <motion.div
+          className="pointer-events-none absolute right-0 top-1/4 h-[450px] w-[450px] translate-x-1/4 rounded-full bg-orange-300/30 blur-[120px]"
+          animate={blobFloat(2)}
+        />
+        <motion.div
+          className="pointer-events-none absolute bottom-0 left-1/2 h-[400px] w-[400px] -translate-x-1/2 translate-y-1/4 rounded-full bg-emerald-300/25 blur-[120px]"
+          animate={blobFloat(4)}
+        />
+
+        <motion.div
+          className="relative z-10 mx-auto max-w-3xl"
+          variants={heroStagger}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div variants={fadeSlideUp} className="mb-6 flex items-center justify-center gap-3">
+            <Leaf className="h-10 w-10 text-primary md:h-11 md:w-11" />
+            <span className="font-mono text-base font-bold uppercase tracking-widest text-primary md:text-lg">
               Plate Pass
             </span>
-          </div>
-          <h1 className="mb-6 text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl">
+          </motion.div>
+          <motion.h1 variants={fadeSlideUp} className="mb-6 text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl">
             Keep Food on Tables, Not in Landfills.
-          </h1>
-          <p className="mx-auto mb-10 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
+          </motion.h1>
+          <motion.p variants={fadeSlideUp} className="mx-auto mb-10 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
             Billions of pounds of food are wasted annually while our neighbors go hungry.
             Plate Pass uses AI and community volunteers to rescue restaurant surplus
             before the doors close.
-          </p>
-          <Button size="lg" className="gap-2" onClick={() => document.getElementById("roles")?.scrollIntoView({ behavior: "smooth" })}>
-            Get Started <ArrowRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </section>    
+          </motion.p>
+          <motion.div variants={fadeSlideUp}>
+            <Button size="lg" className="gap-2" onClick={() => document.getElementById("roles")?.scrollIntoView({ behavior: "smooth" })}>
+              Get Started <ArrowRight className="h-4 w-4" />
+            </Button>
+          </motion.div>
+        </motion.div>
+      </section>
 
       {/* Role Cards */}
-      <section id="roles" className="px-6 py-20">
+      <section id="roles" className="px-6 pb-24 pt-32">
         <div className="mx-auto max-w-5xl">
           <h2 className="mb-3 text-center text-3xl font-bold text-foreground">Join as</h2>
           <p className="mx-auto mb-12 max-w-lg text-center text-muted-foreground">
             Choose your role and start making a difference today. Everyone has a part to play in reducing food waste.
           </p>
-          <div className="grid gap-6 md:grid-cols-3">
+          <motion.div
+            className="grid gap-6 md:grid-cols-3"
+            variants={cardStagger}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.2 }}
+          >
             {/* Restaurant Card */}
-            <Card
-              className="flex flex-col cursor-pointer border-2 border-transparent transition-all hover:border-primary hover:shadow-lg"
-              onClick={() => handleRoleClick("restaurant")}
-            >
-              <CardHeader className="pb-4">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                  <UtensilsCrossed className="h-6 w-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Plater</CardTitle>
-                <CardDescription>Donate surplus food and reduce waste from your kitchen.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col">
-                <ul className="mb-6 flex flex-col gap-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    AI-powered food analysis
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    Track your impact metrics
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    Easy donation scheduling
-                  </li>
-                </ul>
-                <Button className="mt-auto w-full gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground" variant="outline">
-                  Join as Plater <ArrowRight className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
+            <motion.div variants={cardEntrance} whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+              <Card
+                className="flex h-full flex-col cursor-pointer border-2 border-transparent transition-colors hover:border-primary hover:shadow-lg"
+                onClick={() => handleRoleClick("restaurant")}
+              >
+                <CardHeader className="pb-4">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                    <UtensilsCrossed className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Plater</CardTitle>
+                  <CardDescription>Donate surplus food and reduce waste from your kitchen.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col">
+                  <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      AI-powered food analysis
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      Track your impact metrics
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      Easy donation scheduling
+                    </li>
+                  </ul>
+                  <motion.div whileTap={{ scale: 0.95 }} className="mt-auto pt-6">
+                    <Button className="w-full gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground" variant="outline">
+                      Join as Plater <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
             {/* User Card */}
-            <Card
-              className="flex flex-col cursor-pointer border-2 border-transparent transition-all hover:border-eater-accent hover:shadow-lg"
-              onClick={() => handleRoleClick("user")}
-            >
-              <CardHeader className="pb-4">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-eater-accent/10">
-                  <Users className="h-6 w-6 text-eater-accent" />
-                </div>
-                <CardTitle className="text-xl">Eater</CardTitle>
-                <CardDescription>Browse available food near you and place orders for free meals.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col">
-                <ul className="mb-6 flex flex-col gap-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
-                    Filter by cuisine & allergens
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
-                    Pickup or delivery options
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
-                    Real-time availability
-                  </li>
-                </ul>
-                <Button className="mt-auto w-full gap-2 border-eater-accent text-eater-accent hover:bg-eater-accent hover:text-white" variant="outline">
-                  Join as Eater <ArrowRight className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
+            <motion.div variants={cardEntrance} whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+              <Card
+                className="flex h-full flex-col cursor-pointer border-2 border-transparent transition-colors hover:border-eater-accent hover:shadow-lg"
+                onClick={() => handleRoleClick("user")}
+              >
+                <CardHeader className="pb-4">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-eater-accent/10">
+                    <Users className="h-6 w-6 text-eater-accent" />
+                  </div>
+                  <CardTitle className="text-xl">Eater</CardTitle>
+                  <CardDescription>Browse available food near you and place orders for free meals.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col">
+                  <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
+                      Filter by cuisine & allergens
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
+                      Pickup or delivery options
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
+                      Real-time availability
+                    </li>
+                  </ul>
+                  <motion.div whileTap={{ scale: 0.95 }} className="mt-auto pt-6">
+                    <Button className="w-full gap-2 border-eater-accent text-eater-accent hover:bg-eater-accent hover:text-white" variant="outline">
+                      Join as Eater <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
 
             {/* Volunteer Card */}
-            <Card
-              className="flex flex-col cursor-pointer border-2 border-transparent transition-all hover:border-primary hover:shadow-lg"
-              onClick={() => handleRoleClick("volunteer")}
-            >
-              <CardHeader className="pb-4">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
-                  <Truck className="h-6 w-6 text-primary" />
-                </div>
-                <CardTitle className="text-xl">Passer</CardTitle>
-                <CardDescription>Drive surplus food to those in need and climb the leaderboard.</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-1 flex-col">
-                <ul className="mb-6 flex flex-col gap-2 text-sm text-muted-foreground">
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    AI-optimized delivery routes
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    Social leaderboard
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                    Flexible scheduling
-                  </li>
-                </ul>
-                <Button className="mt-auto w-full gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground" variant="outline">
-                  Join as Passer <ArrowRight className="h-4 w-4" />
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+            <motion.div variants={cardEntrance} whileHover={{ y: -5 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+              <Card
+                className="flex h-full flex-col cursor-pointer border-2 border-transparent transition-colors hover:border-primary hover:shadow-lg"
+                onClick={() => handleRoleClick("volunteer")}
+              >
+                <CardHeader className="pb-4">
+                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary/10">
+                    <Truck className="h-6 w-6 text-primary" />
+                  </div>
+                  <CardTitle className="text-xl">Passer</CardTitle>
+                  <CardDescription>Drive surplus food to those in need and climb the leaderboard.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-1 flex-col">
+                  <ul className="flex flex-col gap-2 text-sm text-muted-foreground">
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      AI-optimized delivery routes
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      Social leaderboard
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                      Flexible scheduling
+                    </li>
+                  </ul>
+                  <motion.div whileTap={{ scale: 0.95 }} className="mt-auto pt-6">
+                    <Button className="w-full gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground" variant="outline">
+                      Join as Passer <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </motion.div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
         </div>
       </section>
 
