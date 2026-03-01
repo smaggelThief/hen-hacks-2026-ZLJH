@@ -346,6 +346,8 @@ export function EaterView() {
           return (
             <Card
               key={item.id}
+              role="button"
+              tabIndex={0}
               className="group cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
               onClick={() => { setSelectedItem(item); setIsDelivery(false); setPeople("1"); setOrderError(null); setDeliveryAddress("") }}
             >
@@ -445,16 +447,12 @@ export function EaterView() {
 
                   <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 p-4">
                     <div className="flex items-center gap-2">
-                      {isDelivery ? (
-                        <Truck className="h-4 w-4 text-primary" />
-                      ) : (
-                        <MapPin className="h-4 w-4 text-primary" />
-                      )}
-                      <span className="text-sm font-medium text-foreground">
-                        {isDelivery ? "Delivery" : "Pickup"}
-                      </span>
+                      <Truck className="h-4 w-4 text-primary" />
+                      <Label htmlFor="delivery-toggle" className="text-sm font-medium text-foreground cursor-pointer">
+                        Delivery
+                      </Label>
                     </div>
-                    <Switch checked={isDelivery} onCheckedChange={setIsDelivery} />
+                    <Switch id="delivery-toggle" checked={isDelivery} onCheckedChange={setIsDelivery} />
                   </div>
 
                   {isDelivery ? (
@@ -466,7 +464,7 @@ export function EaterView() {
                           <Input
                             id="delivery-address"
                             className="pl-10"
-                            placeholder="123 Main St, Apt 4B"
+                            placeholder="110 David Hollowell Dr, Newark, DE"
                             value={deliveryAddress}
                             onChange={(e) => setDeliveryAddress(e.target.value)}
                           />

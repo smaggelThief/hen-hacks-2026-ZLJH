@@ -89,7 +89,7 @@ export function PlaterView() {
 
   const [timeStart, setTimeStart] = useState("14:00")
   const [timeEnd, setTimeEnd] = useState("16:00")
-  const [location, setLocation] = useState("742 Evergreen Terrace, Springfield")
+  const [location, setLocation] = useState("83 E Main St, Newark, DE")
 
   const [donations, setDonations] = useState<Donation[]>([])
   const [loadingDonations, setLoadingDonations] = useState(true)
@@ -373,7 +373,7 @@ export function PlaterView() {
                 <Input
                   id="location"
                   className="pl-10"
-                  placeholder="123 Main Street, Suite 4"
+                  placeholder="100 College Ave, Newark, DE"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                 />

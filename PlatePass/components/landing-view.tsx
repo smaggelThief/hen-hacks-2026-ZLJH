@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Leaf, UtensilsCrossed, Users, Truck, ArrowRight, Heart, Recycle, ShieldCheck } from "lucide-react"
+import { Leaf, UtensilsCrossed, Users, Truck, ArrowRight, ShieldCheck } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
 type RoleType = "restaurant" | "user" | "volunteer"
@@ -18,13 +18,17 @@ const ROLE_DISPLAY: Record<RoleType, string> = {
   volunteer: "a Passer",
 }
 
-export function LandingView() {
+interface LandingViewProps {
+  signInTrigger?: number
+}
+
+export function LandingView({ signInTrigger = 0 }: LandingViewProps) {
   const [agreementDialog, setAgreementDialog] = useState<"restaurant" | "volunteer" | null>(null)
   const [agreed, setAgreed] = useState(false)
 
   const [authDialog, setAuthDialog] = useState(false)
   const [authRole, setAuthRole] = useState<RoleType | null>(null)
-  const [isSignUp, setIsSignUp] = useState(true)
+  const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [authError, setAuthError] = useState("")
@@ -34,7 +38,7 @@ export function LandingView() {
   function handleRoleClick(role: RoleType) {
     if (role === "user") {
       setAuthRole("user")
-      setIsSignUp(true)
+      setIsSignUp(false)
       setAuthDialog(true)
     } else {
       setAgreed(false)
@@ -47,7 +51,7 @@ export function LandingView() {
       setAuthRole(agreementDialog)
       setAgreementDialog(null)
       setAgreed(false)
-      setIsSignUp(true)
+      setIsSignUp(false)
       setAuthDialog(true)
     }
   }
@@ -56,14 +60,23 @@ export function LandingView() {
     setEmail("")
     setPassword("")
     setAuthError("")
-    setIsSignUp(true)
+    setIsSignUp(false)
     setAuthRole(null)
     setAuthLoading(false)
     setConfirmEmail(false)
   }
 
+  useEffect(() => {
+    if (signInTrigger > 0) {
+      setAuthRole(null)
+      setIsSignUp(false)
+      setAuthDialog(true)
+    }
+  }, [signInTrigger])
+
   async function handleAuth() {
-    if (!authRole || !email || !password) return
+    if (!email || !password) return
+    if (isSignUp && !authRole) return
     setAuthError("")
     setAuthLoading(true)
 
@@ -117,57 +130,18 @@ export function LandingView() {
             </span>
           </div>
           <h1 className="mb-6 text-balance text-4xl font-bold tracking-tight text-foreground md:text-6xl">
-            Rescue Food. Nourish Communities.
+            Keep Food on Tables, Not in Landfills.
           </h1>
           <p className="mx-auto mb-10 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-            Every day, restaurants discard tons of perfectly good food. Plate Pass bridges the gap
-            between surplus and need, connecting Platers, Eaters, and Passers
-            in one seamless platform.
+            Billions of pounds of food are wasted annually while our neighbors go hungry.
+            Plate Pass uses AI and community volunteers to rescue restaurant surplus
+            before the doors close.
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-4">
-            <Button size="lg" className="gap-2" onClick={() => handleRoleClick("user")}>
-              Get Started <ArrowRight className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="lg" onClick={() => document.getElementById("roles")?.scrollIntoView({ behavior: "smooth" })}>
-              Learn More
-            </Button>
-          </div>
+          <Button size="lg" className="gap-2" onClick={() => document.getElementById("roles")?.scrollIntoView({ behavior: "smooth" })}>
+            Get Started <ArrowRight className="h-4 w-4" />
+          </Button>
         </div>
-      </section>
-
-      {/* Stats Bar */}
-      <section className="border-y border-border bg-card px-6 py-10">
-        <div className="mx-auto flex max-w-5xl flex-col items-center gap-8 md:flex-row md:justify-between">
-          <div className="flex items-center gap-3 text-center md:text-left">
-            <Heart className="h-6 w-6 text-primary" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">12,400+</p>
-              <p className="text-sm text-muted-foreground">Meals Donated</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-center md:text-left">
-            <Recycle className="h-6 w-6 text-primary" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">8,200 lbs</p>
-              <p className="text-sm text-muted-foreground">Food Waste Saved</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-center md:text-left">
-            <Users className="h-6 w-6 text-primary" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">340+</p>
-              <p className="text-sm text-muted-foreground">Active Passers</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-center md:text-left">
-            <UtensilsCrossed className="h-6 w-6 text-primary" />
-            <div>
-              <p className="text-2xl font-bold text-foreground">85</p>
-              <p className="text-sm text-muted-foreground">Partner Platers</p>
-            </div>
-          </div>
-        </div>
-      </section>
+      </section>    
 
       {/* Role Cards */}
       <section id="roles" className="px-6 py-20">
@@ -179,7 +153,7 @@ export function LandingView() {
           <div className="grid gap-6 md:grid-cols-3">
             {/* Restaurant Card */}
             <Card
-              className="group cursor-pointer border-2 border-transparent transition-all hover:border-primary hover:shadow-lg"
+              className="flex flex-col cursor-pointer border-2 border-transparent transition-all hover:border-primary hover:shadow-lg"
               onClick={() => handleRoleClick("restaurant")}
             >
               <CardHeader className="pb-4">
@@ -189,7 +163,7 @@ export function LandingView() {
                 <CardTitle className="text-xl">Plater</CardTitle>
                 <CardDescription>Donate surplus food and reduce waste from your kitchen.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-1 flex-col">
                 <ul className="mb-6 flex flex-col gap-2 text-sm text-muted-foreground">
                   <li className="flex items-start gap-2">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -204,7 +178,7 @@ export function LandingView() {
                     Easy donation scheduling
                   </li>
                 </ul>
-                <Button className="w-full gap-2 group-hover:bg-primary group-hover:text-primary-foreground" variant="outline">
+                <Button className="mt-auto w-full gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground" variant="outline">
                   Join as Plater <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>
@@ -212,32 +186,32 @@ export function LandingView() {
 
             {/* User Card */}
             <Card
-              className="group cursor-pointer border-2 border-transparent transition-all hover:border-accent hover:shadow-lg"
+              className="flex flex-col cursor-pointer border-2 border-transparent transition-all hover:border-eater-accent hover:shadow-lg"
               onClick={() => handleRoleClick("user")}
             >
               <CardHeader className="pb-4">
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-accent/10">
-                  <Users className="h-6 w-6 text-accent" />
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-eater-accent/10">
+                  <Users className="h-6 w-6 text-eater-accent" />
                 </div>
                 <CardTitle className="text-xl">Eater</CardTitle>
                 <CardDescription>Browse available food near you and place orders for free meals.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-1 flex-col">
                 <ul className="mb-6 flex flex-col gap-2 text-sm text-muted-foreground">
                   <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
                     Filter by cuisine & allergens
                   </li>
                   <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
                     Pickup or delivery options
                   </li>
                   <li className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-eater-accent" />
                     Real-time availability
                   </li>
                 </ul>
-                <Button className="w-full gap-2" variant="outline">
+                <Button className="mt-auto w-full gap-2 border-eater-accent text-eater-accent hover:bg-eater-accent hover:text-white" variant="outline">
                   Join as Eater <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>
@@ -245,7 +219,7 @@ export function LandingView() {
 
             {/* Volunteer Card */}
             <Card
-              className="group cursor-pointer border-2 border-transparent transition-all hover:border-primary hover:shadow-lg"
+              className="flex flex-col cursor-pointer border-2 border-transparent transition-all hover:border-primary hover:shadow-lg"
               onClick={() => handleRoleClick("volunteer")}
             >
               <CardHeader className="pb-4">
@@ -255,7 +229,7 @@ export function LandingView() {
                 <CardTitle className="text-xl">Passer</CardTitle>
                 <CardDescription>Drive surplus food to those in need and climb the leaderboard.</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="flex flex-1 flex-col">
                 <ul className="mb-6 flex flex-col gap-2 text-sm text-muted-foreground">
                   <li className="flex items-start gap-2">
                     <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -270,7 +244,7 @@ export function LandingView() {
                     Flexible scheduling
                   </li>
                 </ul>
-                <Button className="w-full gap-2 group-hover:bg-primary group-hover:text-primary-foreground" variant="outline">
+                <Button className="mt-auto w-full gap-2 border-primary text-primary hover:bg-primary hover:text-primary-foreground" variant="outline">
                   Join as Passer <ArrowRight className="h-4 w-4" />
                 </Button>
               </CardContent>

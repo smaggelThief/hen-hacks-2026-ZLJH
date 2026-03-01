@@ -1,62 +1,31 @@
 -- ============================================================
--- Plate Pass — Friends & Leaderboard Schema
--- Run this AFTER schema.sql and orders_migration.sql.
--- Supabase Dashboard → SQL Editor → New Query
+-- Plate Pass — Friends Request & Accept Migration
+-- Run this in Supabase Dashboard → SQL Editor → New Query
+-- Upgrades the instant-add friend system to request/accept flow.
 -- ============================================================
 
+-- 1. Add status column to existing friendships table
+alter table public.friendships
+  add column if not exists status text not null default 'pending';
 
--- --------------------------------------------------------
--- 1. FRIENDSHIPS TABLE
--- --------------------------------------------------------
+-- Set all existing friendships to 'accepted' (they were instant-adds)
+update public.friendships set status = 'accepted' where status = 'pending';
 
-create table if not exists public.friendships (
-  id         uuid default gen_random_uuid() primary key,
-  user_id    uuid references auth.users on delete cascade not null,
-  friend_id  uuid references auth.users on delete cascade not null,
-  status     text not null default 'pending' check (status in ('pending', 'accepted')),
-  created_at timestamptz default now(),
-  unique (user_id, friend_id)
-);
-
-alter table public.friendships enable row level security;
-
-
--- --------------------------------------------------------
--- 2. RLS POLICIES
--- --------------------------------------------------------
-
-drop policy if exists "Users can read own friendships" on public.friendships;
-drop policy if exists "Users can insert own friendships" on public.friendships;
-drop policy if exists "Users can delete own friendships" on public.friendships;
+-- 2. Add update RLS policy
 drop policy if exists "Users can update received friendships" on public.friendships;
-
-create policy "Users can read own friendships"
-  on public.friendships for select
-  to authenticated
-  using (auth.uid() = user_id or auth.uid() = friend_id);
-
-create policy "Users can insert own friendships"
-  on public.friendships for insert
-  to authenticated
-  with check (auth.uid() = user_id);
-
-create policy "Users can delete own friendships"
-  on public.friendships for delete
-  to authenticated
-  using (auth.uid() = user_id or auth.uid() = friend_id);
-
 create policy "Users can update received friendships"
   on public.friendships for update
   to authenticated
   using (auth.uid() = friend_id);
 
+-- Also update delete policy to allow either party to remove
+drop policy if exists "Users can delete own friendships" on public.friendships;
+create policy "Users can delete own friendships"
+  on public.friendships for delete
+  to authenticated
+  using (auth.uid() = user_id or auth.uid() = friend_id);
 
--- --------------------------------------------------------
--- 3. SEND FRIEND REQUEST — RPC
---    Looks up a user by email, verifies they are a Passer
---    (volunteer role), then inserts a pending friendship.
--- --------------------------------------------------------
-
+-- 3. Replace add_friend_by_email with send_friend_request
 create or replace function public.send_friend_request(p_email text)
 returns uuid
 language plpgsql
@@ -89,7 +58,6 @@ begin
     raise exception 'You can only add other Passers as friends.';
   end if;
 
-  -- Check for existing friendship in either direction
   select status into v_existing_status
     from friendships
    where (user_id = auth.uid() and friend_id = v_friend_id)
@@ -112,12 +80,7 @@ begin
 end;
 $$;
 
-
--- --------------------------------------------------------
--- 4. ACCEPT FRIEND REQUEST — RPC
---    The recipient (friend_id) accepts a pending request.
--- --------------------------------------------------------
-
+-- 4. Create accept_friend_request
 create or replace function public.accept_friend_request(p_requester_id uuid)
 returns void
 language plpgsql
@@ -137,12 +100,7 @@ begin
 end;
 $$;
 
-
--- --------------------------------------------------------
--- 5. DECLINE FRIEND REQUEST — RPC
---    The recipient (friend_id) declines / deletes a request.
--- --------------------------------------------------------
-
+-- 5. Create decline_friend_request
 create or replace function public.decline_friend_request(p_requester_id uuid)
 returns void
 language plpgsql
@@ -161,12 +119,7 @@ begin
 end;
 $$;
 
-
--- --------------------------------------------------------
--- 6. GET INCOMING FRIEND REQUESTS — RPC
---    Returns pending requests sent TO the current user.
--- --------------------------------------------------------
-
+-- 6. Create get_incoming_requests
 create or replace function public.get_incoming_requests()
 returns table (
   requester_id uuid,
@@ -191,14 +144,7 @@ begin
 end;
 $$;
 
-
--- --------------------------------------------------------
--- 7. GET LEADERBOARD — RPC
---    Returns the logged-in user + all their ACCEPTED friends,
---    each with their completed delivery count, sorted
---    descending.
--- --------------------------------------------------------
-
+-- 7. Update leaderboard to only count accepted friendships
 create or replace function public.get_friends_leaderboard()
 returns table (
   user_id    uuid,
@@ -233,13 +179,3 @@ begin
   order by deliveries desc, u.email asc;
 end;
 $$;
-
-
--- --------------------------------------------------------
--- MIGRATION HELPER: Add status column to existing table
--- Run this if the friendships table already exists without
--- the status column.
--- --------------------------------------------------------
--- alter table public.friendships
---   add column if not exists status text not null default 'pending'
---   check (status in ('pending', 'accepted'));

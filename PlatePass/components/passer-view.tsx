@@ -20,6 +20,11 @@ import {
   Package,
   CheckCircle2,
   Navigation,
+  Sparkles,
+  Route,
+  UserCheck,
+  X,
+  Mail,
 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 
@@ -49,6 +54,12 @@ interface LeaderboardEntry {
   email: string
   deliveries: number
   is_self: boolean
+}
+
+interface IncomingRequest {
+  requester_id: string
+  email: string
+  created_at: string
 }
 
 function formatTimeWindow(start: string | null, end: string | null): string {
@@ -101,6 +112,18 @@ export function PasserView() {
   const [friendError, setFriendError] = useState("")
   const [friendSuccess, setFriendSuccess] = useState("")
 
+  const [incomingRequests, setIncomingRequests] = useState<IncomingRequest[]>([])
+  const [loadingRequests, setLoadingRequests] = useState(true)
+  const [respondingTo, setRespondingTo] = useState<string | null>(null)
+
+  const [aiRoute, setAiRoute] = useState<{
+    routeOrder: string[]
+    summary: string
+    estimatedTime: string
+  } | null>(null)
+  const [loadingRoute, setLoadingRoute] = useState(false)
+  const [acceptingRoute, setAcceptingRoute] = useState(false)
+
   const fetchTotalDeliveries = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
@@ -128,6 +151,17 @@ export function PasserView() {
       // RPC may not exist yet
     } finally {
       setLoadingLeaderboard(false)
+    }
+  }, [])
+
+  const fetchIncomingRequests = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("get_incoming_requests")
+      if (!error && data) setIncomingRequests(data as IncomingRequest[])
+    } catch {
+      // RPC may not exist yet
+    } finally {
+      setLoadingRequests(false)
     }
   }, [])
 
@@ -174,7 +208,46 @@ export function PasserView() {
     fetchMyDeliveries()
     fetchTotalDeliveries()
     fetchLeaderboard()
-  }, [fetchAvailableOrders, fetchMyDeliveries, fetchTotalDeliveries, fetchLeaderboard])
+    fetchIncomingRequests()
+  }, [fetchAvailableOrders, fetchMyDeliveries, fetchTotalDeliveries, fetchLeaderboard, fetchIncomingRequests])
+
+  useEffect(() => {
+    if (loadingAvailable || availableOrders.length < 2) {
+      setAiRoute(null)
+      return
+    }
+
+    let cancelled = false
+    async function optimizeRoute() {
+      setLoadingRoute(true)
+      try {
+        const deliveries = availableOrders.slice(0, 4).map((o) => ({
+          id: o.id,
+          pickupLocation: o.donations.location,
+          dropoffLocation: o.delivery_address ?? "Pickup (no address)",
+          dishName: o.donations.dish_name,
+        }))
+
+        const res = await fetch("/api/optimize-route", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ deliveries }),
+        })
+
+        if (!res.ok) throw new Error("Route optimization failed")
+        const data = await res.json()
+        if (!cancelled) setAiRoute(data)
+      } catch (err) {
+        console.error("Route optimization error:", err)
+        if (!cancelled) setAiRoute(null)
+      } finally {
+        if (!cancelled) setLoadingRoute(false)
+      }
+    }
+
+    optimizeRoute()
+    return () => { cancelled = true }
+  }, [availableOrders, loadingAvailable])
 
   async function handleAccept(orderId: string) {
     setAcceptingId(orderId)
@@ -238,27 +311,93 @@ export function PasserView() {
     }
   }
 
-  async function handleAddFriend() {
+  async function handleSendRequest() {
     if (!friendEmail.trim()) return
     setAddingFriend(true)
     setFriendError("")
     setFriendSuccess("")
 
     try {
-      const { error } = await supabase.rpc("add_friend_by_email", {
+      const { error } = await supabase.rpc("send_friend_request", {
         p_email: friendEmail.trim(),
       })
 
       if (error) throw error
 
-      setFriendSuccess(`Added ${friendEmail.trim()} as a friend!`)
+      setFriendSuccess("Request sent!")
       setFriendEmail("")
-      await fetchLeaderboard()
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to add friend"
-      setFriendError(message)
+      const e = err as { message?: string } | null
+      setFriendError(e?.message || "Failed to send request")
     } finally {
       setAddingFriend(false)
+    }
+  }
+
+  async function handleAcceptRequest(requesterId: string) {
+    setRespondingTo(requesterId)
+    try {
+      const { error } = await supabase.rpc("accept_friend_request", {
+        p_requester_id: requesterId,
+      })
+      if (error) throw error
+      await Promise.all([fetchIncomingRequests(), fetchLeaderboard()])
+    } catch (err) {
+      console.error("Failed to accept request:", err)
+    } finally {
+      setRespondingTo(null)
+    }
+  }
+
+  async function handleDeclineRequest(requesterId: string) {
+    setRespondingTo(requesterId)
+    try {
+      const { error } = await supabase.rpc("decline_friend_request", {
+        p_requester_id: requesterId,
+      })
+      if (error) throw error
+      await fetchIncomingRequests()
+    } catch (err) {
+      console.error("Failed to decline request:", err)
+    } finally {
+      setRespondingTo(null)
+    }
+  }
+
+  async function handleAcceptRoute() {
+    if (!aiRoute) return
+    setAcceptingRoute(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error("Not authenticated")
+
+      const uniqueIds = [...new Set(
+        aiRoute.routeOrder
+          .map((s) => s.replace(/^(PICKUP|DROPOFF):/, ""))
+      )]
+
+      for (const orderId of uniqueIds) {
+        const order = availableOrders.find((o) => o.id === orderId)
+        if (!order) continue
+
+        setAvailableOrders((prev) => prev.filter((o) => o.id !== orderId))
+        setMyDeliveries((prev) => [{ ...order, status: "volunteer_accepted" }, ...prev])
+
+        const { error } = await supabase
+          .from("orders")
+          .update({ volunteer_id: user.id, status: "volunteer_accepted" })
+          .eq("id", orderId)
+
+        if (error) console.error(`Failed to accept order ${orderId}:`, error)
+      }
+
+      setAiRoute(null)
+      await Promise.all([fetchAvailableOrders(), fetchMyDeliveries()])
+    } catch (err) {
+      console.error("Failed to accept route:", err)
+      await Promise.all([fetchAvailableOrders(), fetchMyDeliveries()])
+    } finally {
+      setAcceptingRoute(false)
     }
   }
 
@@ -366,6 +505,148 @@ export function PasserView() {
             })}
           </div>
           <Separator className="mt-8" />
+        </div>
+      )}
+
+      {/* ── AI Suggested Route ── */}
+      {(loadingRoute || aiRoute) && (
+        <div className="mb-8">
+          <Card className="border-primary/30 bg-primary/[0.02]">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  AI Suggested Route
+                </CardTitle>
+                {aiRoute && (
+                  <Badge variant="outline" className="gap-1 text-xs font-normal">
+                    <Clock className="h-3 w-3" />
+                    {aiRoute.estimatedTime}
+                  </Badge>
+                )}
+              </div>
+              {aiRoute && (
+                <div className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                  <Route className="h-3.5 w-3.5 shrink-0 text-primary" />
+                  <span className="font-medium">{aiRoute.summary}</span>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent>
+              {loadingRoute ? (
+                <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Optimizing route with AI…
+                </div>
+              ) : aiRoute ? (
+                <div className="flex flex-col gap-3">
+                  {aiRoute.routeOrder.map((stop, idx) => {
+                    const isPickup = stop.startsWith("PICKUP:")
+                    const orderId = stop.replace(/^(PICKUP|DROPOFF):/, "")
+                    const order = availableOrders.find((o) => o.id === orderId)
+                    if (!order) return null
+                    const address = isPickup
+                      ? order.donations.location
+                      : order.delivery_address
+                    return (
+                      <div
+                        key={`${stop}-${idx}`}
+                        className={`flex items-start gap-3 rounded-lg border p-3 ${isPickup ? "border-primary/40 bg-primary/[0.03]" : "border-orange-400/40 bg-orange-50/30"}`}
+                      >
+                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${isPickup ? "bg-primary" : "bg-orange-500"}`}>
+                          {idx + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-foreground text-sm">
+                            <Badge variant={isPickup ? "default" : "outline"} className={`mr-2 text-[10px] uppercase ${isPickup ? "bg-primary" : "border-orange-400 text-orange-600"}`}>
+                              {isPickup ? "Pickup" : "Drop-off"}
+                            </Badge>
+                            {order.donations.dish_name}
+                          </p>
+                          <span className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                            {isPickup
+                              ? <MapPin className="h-3 w-3 text-primary" />
+                              : <Navigation className="h-3 w-3 text-orange-500" />}
+                            {address}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  <Button
+                    className="mt-1 w-full gap-2"
+                    disabled={acceptingRoute}
+                    onClick={handleAcceptRoute}
+                  >
+                    {acceptingRoute ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Accepting Route…</>
+                    ) : (
+                      <><Route className="h-4 w-4" /> Accept Entire Route</>
+                    )}
+                  </Button>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ── Incoming Friend Requests ── */}
+      {!loadingRequests && incomingRequests.length > 0 && (
+        <div className="mb-8">
+          <Card className="border-amber-400/30 bg-amber-50/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Mail className="h-4 w-4 text-amber-600" />
+                Friend Requests
+                <Badge variant="secondary" className="ml-1 bg-amber-100 text-amber-700">{incomingRequests.length}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col gap-2">
+                {incomingRequests.map((req) => {
+                  const isResponding = respondingTo === req.requester_id
+                  return (
+                    <div
+                      key={req.requester_id}
+                      className="flex items-center gap-3 rounded-lg border border-border bg-background p-3"
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs bg-amber-100 text-amber-700">
+                          {emailToInitials(req.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{emailToName(req.email)}</p>
+                        <p className="text-xs text-muted-foreground truncate">{req.email}</p>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <Button
+                          size="sm"
+                          className="h-8 gap-1 px-3"
+                          disabled={isResponding}
+                          onClick={() => handleAcceptRequest(req.requester_id)}
+                        >
+                          {isResponding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserCheck className="h-3.5 w-3.5" />}
+                          Accept
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 gap-1 px-3"
+                          disabled={isResponding}
+                          onClick={() => handleDeclineRequest(req.requester_id)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          Decline
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
@@ -534,12 +815,12 @@ export function PasserView() {
         </Card>
       </div>
 
-      {/* ── Add Friend Dialog ── */}
+      {/* ── Send Friend Request Dialog ── */}
       <Dialog open={addFriendOpen} onOpenChange={setAddFriendOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Add a Friend</DialogTitle>
-            <DialogDescription>Enter your friend&apos;s email to add them to your leaderboard.</DialogDescription>
+            <DialogTitle>Send Friend Request</DialogTitle>
+            <DialogDescription>Enter a Passer&apos;s email to send them a friend request.</DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 py-2">
             <Label htmlFor="friend-email">Email</Label>
@@ -549,7 +830,7 @@ export function PasserView() {
               placeholder="friend@example.com"
               value={friendEmail}
               onChange={(e) => { setFriendEmail(e.target.value); setFriendError(""); setFriendSuccess("") }}
-              onKeyDown={(e) => e.key === "Enter" && handleAddFriend()}
+              onKeyDown={(e) => e.key === "Enter" && handleSendRequest()}
             />
             {friendError && (
               <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -565,11 +846,11 @@ export function PasserView() {
           <Separator />
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddFriendOpen(false)}>Close</Button>
-            <Button disabled={addingFriend || !friendEmail.trim()} onClick={handleAddFriend}>
+            <Button disabled={addingFriend || !friendEmail.trim()} onClick={handleSendRequest}>
               {addingFriend ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Adding…</>
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</>
               ) : (
-                "Add Friend"
+                "Send Request"
               )}
             </Button>
           </DialogFooter>

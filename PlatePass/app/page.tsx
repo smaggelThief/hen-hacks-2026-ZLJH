@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Leaf, LogOut } from "lucide-react"
+import { Leaf, LogIn, LogOut } from "lucide-react"
 import { LandingView } from "@/components/landing-view"
 import { PlaterView } from "@/components/plater-view"
 import { EaterView } from "@/components/eater-view"
@@ -21,6 +21,7 @@ const ROLE_LABELS: Record<RoleType, string> = {
 export default function Page() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [signInTrigger, setSignInTrigger] = useState(0)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -74,17 +75,22 @@ export default function Page() {
                 <span className="hidden sm:inline">Sign Out</span>
               </Button>
             </div>
-          ) : null}
+          ) : (
+            <Button variant="ghost" size="sm" className="gap-2 hover:bg-primary/10 hover:text-primary" onClick={() => setSignInTrigger(prev => prev + 1)}>
+              <LogIn className="h-4 w-4" />
+              Sign In
+            </Button>
+          )}
         </div>
       </header>
 
       {/* Main Content */}
       <main className="flex-1">
-        {!user && <LandingView />}
+        {!user && <LandingView signInTrigger={signInTrigger} />}
         {user && role === "restaurant" && <PlaterView />}
         {user && role === "user" && <EaterView />}
         {user && role === "volunteer" && <PasserView />}
-        {user && !role && <LandingView />}
+        {user && !role && <LandingView signInTrigger={signInTrigger} />}
       </main>
 
       {/* Footer */}
